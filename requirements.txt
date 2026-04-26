@@ -1,0 +1,4 @@
+python-frontmatter
+Markdown
+pygments
+PyYAML

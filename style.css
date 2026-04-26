@@ -1,0 +1,513 @@
+:root {
+    --desktop-general-small-radius: 8px;
+    --desktop-general-radius: 14px;
+    --desktop-general-font-size: 14px;
+
+    --float-topbar-height: 28px;
+    --float-topbar-background: rgba(255, 255, 255, 0.75);
+
+    --float-winframe-background: rgba(215, 215, 215, 0.75);
+    --float-active-winframe-background: rgba(245, 245, 245, 0.9);
+    --float-winframe-font-color: rgba(0, 0, 0, 0.5);
+    --float-active-winframe-font-color: rgba(11, 11, 11, 0.75);
+    --float-wincontent-background: rgba(255, 255, 255, 1);
+    --float-winframe-framewidth: 4px;
+    
+    --webde-window-titlebar-height: 28px;
+    --webde-window-titlebar-font-size: 15px;
+    --window-ctrl-btn-size: 17px;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: "Noto Sans SC", sans-serif;
+    background-color: #2c3e50;
+    overflow: hidden;
+    user-select: none;
+}
+
+.desktop-background {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--desktop-background-image);
+    background-size: cover;
+    background-position: center;
+    z-index: -1;
+}
+
+/* 底部水印样式 */
+.desktop-watermark {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 0; /* 位于背景之上，但位于窗口和图标之下 */
+    text-align: right;
+    pointer-events: auto; /* 允许点击链接 */
+    user-select: none;
+}
+
+.desktop-watermark p {
+    margin: 2px 0;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5); /* 半透明白色，适配深色背景 */
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    font-family: var(--desktop-general-fontfamily);
+}
+
+.desktop-watermark a {
+    color: rgba(255, 255, 255, 0.5);
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.desktop-watermark a:hover {
+    color: rgba(255, 255, 255, 0.9);
+    text-decoration: underline;
+}
+
+/* 顶部栏 */
+.top-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: var(--float-topbar-height);
+    background: var(--float-topbar-background);
+    backdrop-filter: blur(10px);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 10px;
+    box-sizing: border-box;
+    z-index: 1000;
+    font-size: 13px;
+    color: #333;
+}
+
+.top-bar-left {
+    display: flex;
+    gap: 15px;
+}
+
+.menu-item {
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.menu-item:hover {
+    background: rgba(0,0,0,0.1);
+}
+
+.clock {
+    font-weight: 500;
+}
+
+/* 桌面图标 */
+.desktop-icons {
+    position: absolute;
+    top: 40px;
+    left: 20px;
+    display: flex;
+    flex-direction: column;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    height: calc(100% - 60px);
+    gap: 20px;
+}
+
+.desktop-icon {
+    width: 80px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    padding: 10px;
+    border-radius: 8px;
+    transition: background 0.2s;
+}
+
+.desktop-icon:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.icon-img {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 5px;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    position: relative;
+}
+
+.folder-icon {
+    background-image: url('https://cdn-icons-png.flaticon.com/512/716/716784.png'); /* 示例文件夹图标 */
+}
+
+.article-icon {
+    background-image: url('https://cdn-icons-png.flaticon.com/512/2991/2991108.png'); /* 示例文章图标 */
+}
+
+.icon-label {
+    color: white;
+    font-size: 12px;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+    text-align: center;
+    word-break: break-all;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.tag {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #e74c3c;
+    color: white;
+    font-size: 10px;
+    padding: 1px 4px;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+.recent .tag {
+    background: #2ecc71;
+}
+
+/* 窗口样式 - 深度参考 WebDE */
+.webde-window {
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    background-color: var(--float-winframe-background);
+    border-radius: var(--desktop-general-radius);
+    position: absolute;
+    box-shadow: 0px 0px 7px 0px rgba(0, 0, 0, 0.39);
+    border: 1px solid rgba(103, 103, 103, 0.208);
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    min-width: 200px;
+    min-height: 150px;
+    transition: background-color 0.25s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+.webde-window.active {
+    background-color: var(--float-active-winframe-background);
+    z-index: 100;
+}
+
+.webde-window-titlebar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: var(--webde-window-titlebar-height);
+    padding: 0 10px; /* 增加右边距，让控制按钮组向左移动一点，稍后会微调按钮组的容器 */
+    color: var(--float-winframe-font-color);
+    font-size: var(--webde-window-titlebar-font-size);
+    user-select: none;
+    background: transparent;
+}
+
+.active .webde-window-titlebar {
+    color: var(--float-active-winframe-font-color);
+}
+
+/* 窗口控制按钮容器 */
+.window-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-right: -2px; /* 这里的负边距配合 titlebar 的 padding 实现与上边距的视觉对称 */
+}
+
+.window-ctrl-btn {
+    width: var(--window-ctrl-btn-size);
+    height: var(--window-ctrl-btn-size);
+    border: 1.5px solid rgba(103, 103, 103, 0.2);
+    border-radius: 50%;
+    
+    /* 强制使用 flex 居中，并确保没有文本偏移 */
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    
+    /* 精确控制字体 */
+    font-size: 11px !important;
+    font-weight: 900 !important;
+    line-height: 0 !important; /* 改为 0，彻底消除行高对垂直/水平的影响 */
+    color: rgba(11, 11, 11, 0.2);
+    cursor: pointer;
+    transition: all 0.2s;
+    overflow: hidden;
+    padding: 0;
+    margin: 0;
+    
+    /* 修正 Material Icons 字体本身的垂直偏移 */
+    padding-top: 1px; 
+    box-sizing: border-box;
+}
+
+/* 专门针对最小化横杠进行微调 */
+.window-ctrl-btn.minimize-icon {
+    padding-top: 4px; /* 进一步增加顶部边距，让横杠再往下挪一点 */
+}
+
+/* 激活状态下的按钮颜色 */
+.active #webde-window-close-btn {
+    background: linear-gradient(#e86c64, #e14f46);
+    color: rgba(0, 0, 0, 0.3); /* 符号颜色保持低调 */
+    border-color: rgba(0, 0, 0, 0.1);
+}
+
+.active #webde-window-close-btn:hover {
+    background: linear-gradient(#fa766d, #e14f46);
+    /* 移除 color: white; 保持符号颜色不变 */
+}
+
+.active .window-ctrl-btn.maxmin-btn {
+    background: linear-gradient(#f8f8f8, #f2f2f2);
+    color: rgba(0, 0, 0, 0.3);
+    border-color: rgba(0, 0, 0, 0.1);
+}
+
+.active .window-ctrl-btn.maxmin-btn:hover {
+    background: linear-gradient(#ffffff, #f8f8f8);
+    /* 移除 color: #333; 保持符号颜色不变 */
+}
+
+.webde-window-content {
+    width: calc(100% - 2*var(--float-winframe-framewidth));
+    height: calc(100% - var(--webde-window-titlebar-height) - var(--float-winframe-framewidth));
+    background-color: var(--float-wincontent-background);
+    border-radius: var(--desktop-general-small-radius);
+    box-sizing: border-box;
+    position: absolute;
+    top: var(--webde-window-titlebar-height);
+    left: var(--float-winframe-framewidth);
+    user-select: text; /* 默认允许选择文字 */
+    z-index: 1;
+    border: 1px solid rgba(103, 103, 103, 0.208);
+    overflow-y: auto; /* 允许滚动 */
+    padding: 20px;
+}
+
+/* 文件夹窗口内容不可选中 */
+.folder-window .webde-window-content {
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+/* Markdown 文章排版样式 */
+.article-render-content {
+    color: #333;
+    line-height: 1.6;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+.article-render-content h1, 
+.article-render-content h2, 
+.article-render-content h3 {
+    margin-top: 24px;
+    margin-bottom: 16px;
+    font-weight: 600;
+    line-height: 1.25;
+}
+
+.article-render-content h1 { font-size: 1.8em; border-bottom: 1px solid #eaecef; padding-bottom: 0.3em; }
+.article-render-content h2 { font-size: 1.4em; border-bottom: 1px solid #eaecef; padding-bottom: 0.3em; }
+
+.article-render-content p {
+    margin-top: 0;
+    margin-bottom: 16px;
+}
+
+.article-render-content code {
+    padding: 0.2em 0.4em;
+    margin: 0;
+    font-size: 85%;
+    background-color: rgba(27,31,35,0.05);
+    border-radius: 3px;
+    font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+.article-render-content pre {
+    padding: 16px;
+    overflow: auto;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f6f8fa;
+    border-radius: 3px;
+    margin-bottom: 16px;
+}
+
+.article-render-content pre code {
+    background-color: transparent;
+    padding: 0;
+}
+
+.article-render-content ul, 
+.article-render-content ol {
+    padding-left: 2em;
+    margin-bottom: 16px;
+}
+
+/* iframe 激活处理 */
+.iframe-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.iframe-click-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    z-index: 100;
+}
+
+/* 拖拽或缩放时禁用内容区域的交互，防止 iframe 拦截鼠标事件 */
+.resizing .webde-window-content,
+.dragging .webde-window-content {
+    pointer-events: none;
+}
+
+.webde-window.minimized {
+    display: none;
+}
+
+.webde-window.maximized {
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+}
+
+.webde-window.maximized .webde-window-content {
+    border-radius: 0;
+    margin: 0;
+    border: none;
+}
+
+.window-title {
+    pointer-events: none;
+}
+
+
+/* 窗口缩放手柄 */
+.resizer {
+    position: absolute;
+    z-index: 10;
+}
+
+.resizer.n {
+    top: -3px;
+    left: 0;
+    width: 100%;
+    height: 6px;
+    cursor: n-resize;
+}
+
+.resizer.s {
+    bottom: -3px;
+    left: 0;
+    width: 100%;
+    height: 6px;
+    cursor: s-resize;
+}
+
+.resizer.w {
+    left: -3px;
+    top: 0;
+    width: 6px;
+    height: 100%;
+    cursor: w-resize;
+}
+
+.resizer.e {
+    right: -3px;
+    top: 0;
+    width: 6px;
+    height: 100%;
+    cursor: e-resize;
+}
+
+.resizer.nw {
+    top: -5px;
+    left: -5px;
+    width: 12px;
+    height: 12px;
+    cursor: nw-resize;
+    z-index: 11;
+}
+
+.resizer.ne {
+    top: -5px;
+    right: -5px;
+    width: 12px;
+    height: 12px;
+    cursor: ne-resize;
+    z-index: 11;
+}
+
+.resizer.sw {
+    bottom: -5px;
+    left: -5px;
+    width: 12px;
+    height: 12px;
+    cursor: sw-resize;
+    z-index: 11;
+}
+
+.resizer.se {
+    bottom: -5px;
+    right: -5px;
+    width: 12px;
+    height: 12px;
+    cursor: se-resize;
+    z-index: 11;
+}
+
+.maximized .resizer {
+    display: none;
+}
+
+
+.folder-content {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 15px;
+}
+
+.desktop-icon.small {
+    width: 60px;
+}
+
+.desktop-icon.small .icon-img {
+    width: 32px;
+    height: 32px;
+}
+
+.desktop-icon.small .icon-label {
+    color: #333;
+    text-shadow: none;
+    font-size: 11px;
+}
+
+.article-render-content {
+    padding: 20px;
+    line-height: 1.6;
+    color: #333;
+}

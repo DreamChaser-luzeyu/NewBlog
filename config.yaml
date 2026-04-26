@@ -1,0 +1,13 @@
+# 站点配置
+site:
+  title: "我的个人博客"
+  author: "Your Name"
+  copyright: "© 2024 Your Name. All Rights Reserved."
+  beian: "某ICP备12345678号-1"
+  beian_url: "https://beian.miit.gov.cn/"
+
+# 社交链接
+social:
+  github: "https://github.com/your-handle"
+  email: "mailto:your-email@example.com"
+  twitter: "https://twitter.com/your-handle"

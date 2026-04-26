@@ -1,0 +1,56 @@
+{
+    "config": {
+        "site": {
+            "title": "我的个人博客",
+            "author": "Your Name",
+            "copyright": "© 2024 Your Name. All Rights Reserved.",
+            "beian": "某ICP备12345678号-1",
+            "beian_url": "https://beian.miit.gov.cn/"
+        },
+        "social": {
+            "github": "https://github.com/your-handle",
+            "email": "mailto:your-email@example.com",
+            "twitter": "https://twitter.com/your-handle"
+        }
+    },
+    "categories": [
+        {
+            "id": 1000,
+            "name": "技术",
+            "articles": [
+                1
+            ]
+        },
+        {
+            "id": 1001,
+            "name": "生活",
+            "articles": [
+                2
+            ]
+        }
+    ],
+    "articles": [
+        {
+            "id": 1,
+            "title": "Vue 3 桌面系统开发实战",
+            "date": "2024-04-26",
+            "category": 1000,
+            "content_url": "dist/posts/post_1.html",
+            "pinned": true,
+            "type": "article"
+        },
+        {
+            "id": 2,
+            "title": "我的第一篇生活随笔",
+            "date": "2024-04-25",
+            "category": 1001,
+            "content_url": "dist/posts/post_2.html",
+            "pinned": false,
+            "type": "article"
+        }
+    ],
+    "pages": {
+        "about": "dist/pages/about.html",
+        "social": "dist/pages/social.html"
+    }
+}

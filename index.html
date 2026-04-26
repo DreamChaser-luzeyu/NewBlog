@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的个人博客 - 桌面版</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@100..900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+</head>
+<body style="overflow: hidden;">
+    <div id="app">
+        <!-- 桌面背景 -->
+        <div class="desktop-background"></div>
+
+        <!-- 底部版权/备案水印 -->
+        <div class="desktop-watermark">
+            <p>{{ config.site.copyright }}</p>
+            <p><a :href="config.site.beian_url" target="_blank">{{ config.site.beian }}</a></p>
+        </div>
+
+        <!-- 顶部栏 -->
+        <div class="top-bar">
+            <div class="top-bar-left">
+                <div class="menu-item" @click="openAbout">关于</div>
+                <div class="menu-item" @click="openSocial">社交</div>
+            </div>
+            <div class="top-bar-right">
+                <div class="clock">{{ currentTime }}</div>
+            </div>
+        </div>
+
+        <!-- 桌面图标区域 -->
+        <div class="desktop-icons">
+            <!-- 分类文件夹 -->
+            <div v-for="cat in categories" :key="cat.id" class="desktop-icon" @dblclick="openFolder(cat)">
+                <div class="icon-img folder-icon"></div>
+                <div class="icon-label">{{ cat.name }}</div>
+            </div>
+
+            <!-- 置顶文章 -->
+            <div v-for="article in pinnedArticles" :key="article.id" class="desktop-icon pinned" @dblclick="openArticle(article)">
+                <div class="icon-img article-icon">
+                    <span class="tag">置顶</span>
+                </div>
+                <div class="icon-label">{{ article.title }}</div>
+            </div>
+
+            <!-- 最近文章 -->
+            <div v-for="article in recentArticles" :key="article.id" class="desktop-icon recent" @dblclick="openArticle(article)">
+                <div class="icon-img article-icon">
+                    <span class="tag">最新</span>
+                </div>
+                <div class="icon-label">{{ article.title }}</div>
+            </div>
+        </div>
+
+        <!-- 文件夹窗口 (用于显示分类下的文章) -->
+        <div v-for="folder in openFolders" :key="folder.id" 
+             class="webde-window folder-window" 
+             :class="{ active: activeWindowId === folder.id, 'minimized': folder.minimized, 'maximized': folder.maximized }"
+             :style="folder.style" 
+             @mousedown="handleDrag($event, folder, 'folder')">
+            <div class="webde-window-titlebar">
+                <span class="window-title">{{ folder.name }}</span>
+                <div class="window-controls">
+                    <div class="material-icons window-ctrl-btn maxmin-btn minimize-icon" @click.stop="minimizeWindow(folder, 'folder')">remove</div>
+                    <div class="material-icons window-ctrl-btn maxmin-btn" @click.stop="maximizeWindow(folder, 'folder')">{{ folder.maximized ? 'filter_none' : 'crop_square' }}</div>
+                    <div class="material-icons window-ctrl-btn" id="webde-window-close-btn" @click.stop="closeFolder(folder.id)">close</div>
+                </div>
+            </div>
+            <div class="webde-window-content window-content-enable">
+                <div class="folder-content">
+                    <div v-for="article in getArticlesByCategory(folder.id)" :key="article.id" class="desktop-icon small" @dblclick="openArticle(article)">
+                        <div class="icon-img article-icon"></div>
+                        <div class="icon-label">{{ article.title }}</div>
+                    </div>
+                </div>
+            </div>
+            <!-- 缩放手柄 -->
+            <div class="resizer n" @mousedown.stop="handleResize($event, folder, 'folder', 'n')"></div>
+            <div class="resizer s" @mousedown.stop="handleResize($event, folder, 'folder', 's')"></div>
+            <div class="resizer w" @mousedown.stop="handleResize($event, folder, 'folder', 'w')"></div>
+            <div class="resizer e" @mousedown.stop="handleResize($event, folder, 'folder', 'e')"></div>
+            <div class="resizer nw" @mousedown.stop="handleResize($event, folder, 'folder', 'nw')"></div>
+            <div class="resizer ne" @mousedown.stop="handleResize($event, folder, 'folder', 'ne')"></div>
+            <div class="resizer sw" @mousedown.stop="handleResize($event, folder, 'folder', 'sw')"></div>
+            <div class="resizer se" @mousedown.stop="handleResize($event, folder, 'folder', 'se')"></div>
+        </div>
+
+        <!-- 文章窗口 -->
+        <div v-for="win in openArticles" :key="win.id" 
+             class="webde-window article-window" 
+             :class="{ active: activeWindowId === win.id, 'minimized': win.minimized, 'maximized': win.maximized }"
+             :style="win.style" 
+             @mousedown="handleDrag($event, win, 'article')">
+            <div class="webde-window-titlebar">
+                <span class="window-title">{{ win.title }}</span>
+                <div class="window-controls">
+                    <div class="material-icons window-ctrl-btn maxmin-btn minimize-icon" @click.stop="minimizeWindow(win, 'article')">remove</div>
+                    <div class="material-icons window-ctrl-btn maxmin-btn" @click.stop="maximizeWindow(win, 'article')">{{ win.maximized ? 'filter_none' : 'crop_square' }}</div>
+                    <div class="material-icons window-ctrl-btn" id="webde-window-close-btn" @click.stop="closeArticle(win.id)">close</div>
+                </div>
+            </div>
+            <div class="webde-window-content window-content-enable">
+                <div v-if="win.type === 'iframe'" class="iframe-container">
+                    <iframe :src="win.url" frameborder="0" style="width:100%; height:100%"></iframe>
+                    <!-- 未激活时的遮罩层，用于捕捉点击事件并激活窗口 -->
+                    <div v-if="activeWindowId !== win.id" class="iframe-click-overlay"></div>
+                </div>
+                <div v-else class="article-render-content" v-html="win.content"></div>
+            </div>
+            <!-- 缩放手柄 -->
+            <div class="resizer n" @mousedown.stop="handleResize($event, win, 'article', 'n')"></div>
+            <div class="resizer s" @mousedown.stop="handleResize($event, win, 'article', 's')"></div>
+            <div class="resizer w" @mousedown.stop="handleResize($event, win, 'article', 'w')"></div>
+            <div class="resizer e" @mousedown.stop="handleResize($event, win, 'article', 'e')"></div>
+            <div class="resizer nw" @mousedown.stop="handleResize($event, win, 'article', 'nw')"></div>
+            <div class="resizer ne" @mousedown.stop="handleResize($event, win, 'article', 'ne')"></div>
+            <div class="resizer sw" @mousedown.stop="handleResize($event, win, 'article', 'sw')"></div>
+            <div class="resizer se" @mousedown.stop="handleResize($event, win, 'article', 'se')"></div>
+        </div>
+    </div>
+
+    <script src="main.js" type="module"></script>
+</body>
+</html>
