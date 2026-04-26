@@ -63,7 +63,7 @@ createApp({
             }
             const folder = {
                 ...category,
-                viewMode: 'grid',
+                viewMode: 'list',
                 minimized: false,
                 maximized: false,
                 style: {
