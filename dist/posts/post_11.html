@@ -1,0 +1,262 @@
+<p>本文档由 AI 总结，可能有错误。</p>
+<p>这篇文章研究的是：当内存变得更远、更大，但访问也更慢时，传统处理器依赖同步读写内存的方式会很容易被高延迟拖住，导致算力和带宽都用不起来。作者要解决的是，在远端内存、内存池化、异构内存这类场景里，怎样让处理器一次发出很多并行内存请求，同时又不把流水线里的关键硬件资源长期占满。论文的做法是：设计一个异步内存访问单元 AMU，并为 RISC-V 增加一组异步内存访问指令 AME，把“发请求”和“等返回”拆开，再配合可变访问粒度、片上暂存区和协程编程框架，提高远端内存场景下的内存级并行性。</p>
+<h2 id="_1">论文信息</h2>
+<ul>
+<li>标题：Architecture and RISC-V ISA Extension Supporting Asynchronous and Flexible Parallel Far Memory Access</li>
+<li>作者：Songyue Wang, Luming Wang, Tianyue Lu, Mingyu Chen</li>
+<li>单位：Center for Advanced Computer Systems, ICT, CAS；University of Chinese Academy of Sciences</li>
+<li>会议：CARRV 2022</li>
+</ul>
+<h2 id="_2">摘要</h2>
+<p>如今，内存访问速度的提升已经明显落后于 CPU 性能的提升。随着远端内存技术（例如异构内存与内存池化）伴随数据集持续增大而不断发展，“内存墙”问题变得更加严重。远端内存的访问延迟比传统 DRAM 更高，但它能提供更大的容量。然而，现代 CPU 对延迟非常敏感，难以高效地充分利用远端内存资源。</p>
+<p>本文提出了一种面向远端内存场景的体系结构，它支持显式操控大规模并行的异步内存访问，并给出了对应的 RISC-V ISA 扩展（AME）。该工作将一次内存访问操作中的请求与响应解耦，并提供了非阻塞模式下的异步 load/store 指令，且支持可变粒度。软件可以使用 AME 发出大量相互重叠的内存访问请求，并在等待响应期间专注于其他工作，从而提升性能。</p>
+<p>我们在一颗 RISC-V CPU 上实现了 AME，并构建了一个基于 FPGA 的原型系统。评估结果表明：对于内存敏感型基准测试，在面对等效于 2GHz CPU 上额外 2μs 的远端内存延迟时，我们的方法平均可获得 11 倍加速；在 HPCC Random Access 上，平均飞行中内存请求数达到 238。该方法在图计算、并发数据结构等其他实际的内存密集型应用中也表现出改进效果。</p>
+<p><strong>关键词：</strong> 内存级并行性、异步内存访问</p>
+<h2 id="1">1 引言</h2>
+<p>如今，大数据应用对内存容量的需求不断增长，例如内存数据库、在线分析等。为满足这种需求，数据中心正在引入多种新型内存。当前一种解决方案是使用新的互连技术与协议访问其他机器或内存池中的内存，例如 CXL、OpenCAPI 和 GenZ。另一个例子是非易失性主存（NVMM），它相比 DRAM 具有更高的存储密度，并且仍可按缓存行粒度进行访问。本文将上述这类内存统称为<strong>远端内存（far memory）</strong>，因为它通常是松耦合连接的，其访问延迟高于 DRAM。它们主要具有如下特征：</p>
+<ul>
+<li><strong>可通过 load/store 直接访问。</strong> 本文关注的是应用通过 load/store 指令访问远端内存，而不是将其作为交换设备来使用的场景。</li>
+<li><strong>延迟分布范围广。</strong> 应用可以访问远程节点上的内存，或者访问新型介质（例如 NVMM），其访问延迟可能分布在很宽的范围内。</li>
+<li><strong>潜在的总容量和总带宽很大。</strong> 由于内存资源可来自多个节点，大量内存通道使总容量与总带宽相较本地内存具有明显优势，这也给处理器如何充分利用这些丰富的内存资源带来了挑战。</li>
+</ul>
+<p>然而，现代 CPU 对内存访问延迟极为敏感。研究表明，在 Azure 上使用 CXL 时，即便仅引入 64ns 的额外延迟，内存受限型工作负载（如 Redis 和 GAPBS）的平均性能下降也超过 30%。现代 CPU 通常通过隐式发出并行内存请求来隐藏长访问延迟：它利用乱序执行机制，动态调度多条 load/store 指令并行执行。此外，非阻塞缓存通过缺失状态处理寄存器（MSHR）同时服务多个内存请求。在这种情况下，访问延迟会被内存级并行性（MLP）隐藏。</p>
+<p>延迟越长，所需的 MLP 就越高。典型 DRAM 延迟低于 200ns，而远端内存的延迟大约在 300ns 到 5μs 之间。因此，在远端内存系统中，待完成内存请求的数量可能远大于本地 DRAM 系统。但为了发出并管理这些飞行中的请求，CPU 需要多种硬件资源，例如重排序缓冲区、物理寄存器文件、load/store 队列以及 MSHR。这些硬件资源限制了 CPU 的 MLP，因为它们使 CPU 无法发出足够多的请求来掩盖远端内存访问延迟。例如，单个 Intel Skylake 核心最多只能支持不超过 12 个飞行中的 DRAM 内存访问。除此之外，现有内存访问策略的粒度固定为缓存行大小：对小块随机访问来说，这一粒度过大；而对顺序大块访问来说，这一粒度又不足。因此，在远端内存场景下，提高 MLP 面临两个挑战：</p>
+<p><strong>如何让 CPU 更充分、更灵活地利用高内存带宽？</strong> 我们在 CPU 核心内部提出异步内存访问单元（AMU）。AMU 将内存访问请求与响应逻辑解耦，并使用容量远大于 MSHR 的存储来记录飞行中请求的状态，从而支持大规模并行发出请求。此外，load/store 请求大小可由软件决定，从 8B 到 1KB 可变。AMU 可以通过大量重叠请求以及按需精确访问数据大小，帮助 CPU 更充分地利用带宽。</p>
+<p><strong>如何减少长延迟 load/store 指令对关键资源的占用？</strong> 我们提出 RISC-V 异步内存访问 ISA 扩展（AME）来解决这一问题。长时间占用的根源在于：同步 load/store 指令在 CPU 流水线中等待响应时，会同时占据关键资源。作为 AMU 的软件接口，AME 从微架构层面概念性地提供了异步 load/store 指令（即 aload 和 astore）。aload/astore 指令在不等待数据返回的情况下即可提交。应用程序可以使用 AME 批量发出请求，然后在等待响应期间继续做其他计算，以提升性能。</p>
+<p>AMU 与 AME 都设计在 RISC-V 体系结构之上，因为 RISC-V 是开源且可扩展的 ISA，并且 RISC-V CPU 的架构更简洁、更现代。我们使用 Chisel HDL，基于 NutShell 实现了 AMU 与 AME。NutShell 是一个顺序执行的开源 RISC-V64（IMACSU）SoC，已经过流片验证。在此基础上，我们又在 Xilinx ZYNQ UltraScale+ ZU19EG MPSoC 板上构建了一个 FPGA 原型系统，并在其中实现了一条支持高带宽和可变延迟的远端内存访问仿真路径。为支持编程，我们提供了一个灵活的基于协程的编程框架，并在一系列内存敏感型基准上评估性能。结果表明：当远端内存引入的额外延迟为 2μs（相对于 2GHz CPU）时，我们的方法平均可获得 11 倍加速；对于 HPCC Random Access，平均飞行中请求数达到 238；对顺序内存访问，性能提升分别可达到 63.48 倍（顺序）和 9.04 倍（随机）。同时，我们发现使用 AME 的应用对延迟变化不那么敏感。</p>
+<p>总之，本文的贡献如下：</p>
+<ol>
+<li>提出一种 RISC-V ISA 扩展 AME，并设计其配套架构 AMU，通过支持可变粒度的异步访问来提升远端内存场景下的 MLP。</li>
+<li>设计了一种利用 AME 挖掘 MLP 的编程范式。</li>
+<li>在一颗 RISC-V CPU 上实现了 AMU 和 AME，并构建了基于 FPGA 的原型系统，随后使用内存受限型工作负载进行评估。</li>
+</ol>
+<h2 id="2">2 背景</h2>
+<p>本节首先介绍现有用于掩盖长内存访问延迟的方法，并分析其效果；随后概述我们设计的关键思想。</p>
+<h3 id="21">2.1 软件层面的延迟容忍技术</h3>
+<p>远端内存相对较高的延迟，会给延迟敏感型应用带来性能挑战。交错执行（interleaved execution）是一种通用技术：它通过运行多个协程（或轻量线程）来隐藏延迟。由于现有 CPU 并不具备异步访问指令，软件通常通过调用预取指令来模拟类似异步访问的效果。软件首先发出一条预取指令，然后执行另一个协程；当预取预计已经完成时，再切换回来执行真正的 load/store 指令访问内存。</p>
+<p>研究者已经提出多种利用查找类操作并行性的编程范式，例如 Group Prefetching（GP）、Software-Pipelined Prefetching（SPP）以及 Asynchronous Memory Access Chaining（AMAC）。然而，将现有代码改造成适配这些范式通常十分痛苦。为了更容易实现此类范式，研究者尝试使用 C++20 标准并发库，或者设计领域专用语言。但这些方法的关键问题是：应用无法确知数据是否已经被取到本地缓存中，这样既不智能，也不具备可移植性。此外，CPU 同时能处理的预取请求数量也是有限的。</p>
+<h3 id="22">2.2 硬件层面的延迟容忍技术</h3>
+<p>基于乱序执行和非阻塞缓存，研究者尝试通过多种方式提升处理器的延迟容忍能力，也就是提升 MLP。</p>
+<p>在实际实现中，MSHR 通常是全相联数组，难以继续增大。为了解决这个问题，有研究提出用哈希数组替代全相联 MSHR。另一种思路是增加额外空间（如 ROB、指令队列等）来处理长延迟 load。例如，Load Slice Core 和 Forward Slice Core 借助依赖分析（IBDA）增加额外的指令队列，以便发出其他 load/store 及其地址计算指令；该过程对软件透明。这样一来，这些指令就不再长期占据处理器中的关键资源。</p>
+<p>所有这些技术的核心思想，都是让 CPU 能动态调度并发出更多内存访问请求，以覆盖等待数据响应所造成的长延迟。然而，它们都没有从根本上解决瓶颈问题：CPU 中关键硬件资源（如寄存器文件、ROB、IQ 和 MSHR）的数量是有限的。假设 CPU 运行在 2GHz 上，若远端内存访问延迟为 1μs，则延迟高达 2000 个周期。一条面向远端内存的 load 指令发出后，为防止流水线停顿，ROB 需要数千级别的表项，物理寄存器也需要数千个来回写结果。如果后续还有大量 load 指令，情况只会更糟，甚至可能需要数百个 MSHR。显然，这些资源需求已经超出当前技术所能提供的范围。因此，我们认为，现有通过隐式方式发出并行内存请求的机制，不足以应对远端内存延迟。</p>
+<h3 id="23-ame">2.3 AME 的关键思想</h3>
+<p>AME 是针对第 1 节所述问题提出的一种新方案，具有三个关键思想。思想 A 解决传统 load/store 指令长时间占用关键硬件资源的问题；思想 B 使 CPU 能够批量发出大量内存访问请求，以充分利用带宽；思想 C 则以一种新方式解决 CPU 流水线与缓存中关键资源不足的困境。</p>
+<p><strong>A. 支持可变粒度的异步内存访问指令。</strong> aload 和 astore 指令在不等待内存响应的情况下即可提交，它们只是把请求写入 L2 Cache 数据阵列中的异步内存请求队列（AMQ）。每个请求都用一个 ID 标记。ID 可复用，但软件需要保证在传输期间其唯一性。对于远端内存访问路径，我们采用支持传递该 ID 的内存访问协议，大多数协议都支持这一点，例如 AXI4 中的 ID 信号。我们还提供一条指令 getfin，用于查询已完成请求；它将返回一个已完成请求的 ID。这就是软件获知请求是否完成的方式。AME 指令的异步设计，能够大幅减轻 ROB 和 IQ 的压力。</p>
+<p>此外，aload 和 astore 还支持从 8B 到 1KB 的可变粒度内存访问。访问粒度由 AMU 中的一个控制寄存器设置，具体见第 3.3 节。这使软件可以更灵活地按需发起细粒度随机访问，而不必被迫对齐到缓存行大小；同时，也可以通过单次请求装载或写回大量数据，更充分地利用带宽。第 6 节将通过实验展示 AME 可变粒度支持所带来的收益。</p>
+<p><strong>B. 将内存请求与响应解耦。</strong> 本文将此前顺序耦合的请求通道处理逻辑与响应通道处理逻辑分离开来。异步内存请求逻辑会依次发送 AMQ 中的异步内存请求；异步内存响应逻辑则维护一个异步内存请求完成 ID 队列（AFQ），负责处理数据响应，并将完成的 ID 写入 AFQ。</p>
+<p><strong>C. 可配置的 ScratchPad Memory（SPM）。</strong> 为解决关键资源短缺问题，AMU 将 L2 Cache 的一部分配置为 SPM，以部分替代 MSHR 和物理寄存器文件的功能，因此 AMQ 和 AFQ 都放置在 SPM 中。除此之外，软件还可以调整 Cache 区域与 SPM 区域的比例。该设计有两个优势。首先，L2 Cache 的容量（通常大于 128KB）远大于 MSHR 和寄存器文件的大小，足以维持大量飞行中的内存访问请求。此外，SPM 还可用于存放数据，减轻寄存器文件的压力。对于 AMU 支持的大粒度内存访问（例如 512B），寄存器文件容量不足以存放响应数据，而 SPM 则可以轻松容纳。其次，这一设计与原有架构兼容：对于不使用 AME 的应用，SPM 可被完整配置回缓存空间。因此，本文提出的 AMU 不会对传统应用造成性能影响；流水线原有结构也不需要大幅修改，同时无需额外引入大面积存储与复杂逻辑。</p>
+<h2 id="3-isa">3 ISA 与微架构</h2>
+<p>本节首先介绍表 1 所示的 RISC-V AME 扩展规范，它使用 custom-0（0001011）作为操作码；随后介绍 AMU 的微架构。</p>
+<h3 id="31-isa">3.1 ISA 扩展</h3>
+<p>表 1 给出了 RISCV64-AME ISA 扩展的编码规范，对应指令包括：</p>
+<ul>
+<li><code>ALOAD</code></li>
+<li><code>ASTORE</code></li>
+<li><code>GETFIN</code></li>
+<li><code>ASETID</code></li>
+<li><code>ACFGRD</code></li>
+<li><code>ACFGWR</code></li>
+</ul>
+<p><img alt="表 1：RISCV64-AME ISA 扩展规范（所在页）" src="posts/论文阅读/pages/Architecture_and_RISC-V_ISA_Extension_Supporting_Asynchronous_and_Flexible_Parallel_Far_Memory_Access/page-3.png" /></p>
+<p>这些指令的功能如下：</p>
+<ul>
+<li><strong>asetid id</strong>：设置请求 ID。之所以单独设计一条设置 ID 的指令，是因为 RISC-V 指令只有两个源操作数。ID 从 1 开始编号。</li>
+<li><strong>aload spm_addr, mem_addr</strong>：使用当前设置的请求 ID（最近一次 asetid 设置的值）发出异步 load 请求，将内存地址 rs2 处的数据读取到 SPM 地址 rs1。</li>
+<li><strong>astore spm_addr, mem_addr</strong>：异步 store 请求指令，将 SPM 地址 rs1 处的数据写到内存地址 rs2。</li>
+<li><strong>getfin id</strong>：从 AFQ 中获取一个已完成请求的 ID。若当前没有已完成请求，则返回 0。</li>
+<li><strong>acfgrd value, offset</strong>：读取 AMU 配置寄存器（见表 2）。</li>
+<li><strong>acfgwr value, offset</strong>：写入 AMU 配置寄存器。</li>
+</ul>
+<p>编程模型将在第 4 节中描述。这里我们先关注 AMU 的微架构。图 1 展示了 CPU 核心中 AMU 逻辑的概览，其主要分布在 CPU 流水线与 L2 Cache 中。</p>
+<p><img alt="图 1：AMU 在 CPU 核心中的总体结构（所在页）" src="posts/论文阅读/pages/Architecture_and_RISC-V_ISA_Extension_Supporting_Asynchronous_and_Flexible_Parallel_Far_Memory_Access/page-2.png" /></p>
+<h3 id="32">3.2 流水线中的新增功能</h3>
+<p>除了解码逻辑之外，load/store 单元（LSU）还需要将 aload 和 astore 请求直接转发到 L2 Cache。在请求写入 SPM 中的 AMQ 后，aload 和 astore 即可提交。getfin 会从 SPM 中的 AFQ 里取出一个 ID，这一点与标准 load 指令类似。acfgrd 和 acfgwr 也需要被转发到 L2 Cache，因为 AMU 控制寄存器位于那里。对于普通的 load/store 指令，TLB 和内存访问路径也应允许它们直接访问位于 L2 Cache 中的 SPM。</p>
+<h3 id="33-l2-cache-amu">3.3 L2 Cache 内部的 AMU 逻辑</h3>
+<p>这里先介绍 SPM 的划分方式。根据 AMU 控制寄存器中的 SPMWAY（见表 2），SPM 占据数据阵列中若干个连续的 way，其地址由 way 号与 set 号拼接编码而成。软件使用标准 load/store 访问 SPM，并可通过 acfgwr 调整其大小。SPMWAY 也可以设为 0，从而保留所有 cache way。</p>
+<p>元数据位于 SPM 的起始部分，其中包括第 2.3 节提到的两个环形队列 AMQ 与 AFQ，以及一个在响应到来时用于查询的元数据表 FIN_META。当来自 CPU 流水线的 aload 或 astore 请求到达 L2 Cache 时，AMU 会把 <code>{spm_addr, mem_addr, ID, request type（aload 或 astore）, granularity in RWLEN}</code> 记录为 AMQ 中的一项。FIN_META 表被设计为支持来自远端内存的乱序响应，它按请求 ID 索引，而不是采用环形队列。当一个请求由 AMU 发出时，处理响应所需的信息（SPM 地址、数据长度和请求类型）会被记录到 <code>FIN_META[request ID]</code> 中。这样，当响应乱序返回时，就可以避免新请求覆盖前一个尚未完成请求的元数据。</p>
+<p>表 2 中的 AMU 控制寄存器包括：</p>
+<ul>
+<li><strong>SPMWAY</strong>：SPM 在数据阵列中连续占用的 way 数量（从第 0 way 开始）</li>
+<li><strong>AMQLEN</strong>：AMQ、AFQ 和 FIN_META 的长度</li>
+<li><strong>RWLEN</strong>：一次 aload 或 astore 访问的数据长度（需要 8 字节对齐）</li>
+</ul>
+<p><img alt="表 2：AMU 控制寄存器（所在页）" src="posts/论文阅读/pages/Architecture_and_RISC-V_ISA_Extension_Supporting_Asynchronous_and_Flexible_Parallel_Far_Memory_Access/page-3.png" /></p>
+<p>最后介绍解耦后的异步内存请求与响应逻辑，它们是通过状态机实现的（图 1 中的 Send FSM 与 Recv FSM）。Send FSM 顺序读取 AMQ 中的请求项，并依次发出带有 ID 的远端内存访问请求，然后将其记录到 <code>FIN_META[request ID]</code> 中。Recv FSM 则在远端内存响应到来时开始工作。它首先根据响应 ID 查找 FIN_META 中的元数据；随后，如果请求类型为 aload，则将响应数据写入 SPM；最后把响应 ID 放入 AFQ。</p>
+<h2 id="4">4 编程模型</h2>
+<p>传统内存访问在代码层面都是串行且同步的，因此需要一种新的编程范式来利用 AME 所提供的异步内存访问能力。本节首先展示使用 AME 的基本编程方法，随后介绍一个基于协程的灵活编程框架 CAP（Coroutines for AME Programming），它可以大幅简化 AME 的使用代码。为方便使用，我们把 AME 指令封装成 C/C++ 函数接口，如表 3 所示：</p>
+<ul>
+<li><code>aload(int id, uintptr_t spm_addr, uintptr_t mem_addr)</code></li>
+<li><code>astore(int id, uintptr_t spm_addr, uintptr_t mem_addr)</code></li>
+<li><code>int getfin()</code></li>
+<li><code>uint64_t acfgrd(int offset)</code></li>
+<li><code>void acfgwr(uint64_t value, int offset)</code></li>
+</ul>
+<p><img alt="表 3：AME 指令对应的函数接口（所在页）" src="posts/论文阅读/pages/Architecture_and_RISC-V_ISA_Extension_Supporting_Asynchronous_and_Flexible_Parallel_Far_Memory_Access/page-4.png" /></p>
+<h3 id="41">4.1 基本范式</h3>
+<p>列表 1 展示了 AME 的基本编程范式。程序首先配置 AMU，然后执行不等待数据返回的 aload。接下来，在该请求未完成时处理其他工作，并按需通过 getfin 检查已完成的请求。请求完成后，数据可再通过标准 load/store 指令访问。</p>
+<div class="codehilite"><pre><span></span><code><span class="cp">#define MAX_PARALLELISM 128</span>
+<span class="kt">int</span><span class="w"> </span><span class="o">*</span><span class="n">far_mem_to_access</span><span class="p">;</span><span class="w"> </span><span class="c1">// 假定位于远端内存</span>
+<span class="c1">// 配置 AMU</span>
+<span class="n">acfgwr</span><span class="p">(</span><span class="n">MAX_PARALLELISM</span><span class="p">,</span><span class="w"> </span><span class="n">AMQLEN</span><span class="p">);</span>
+<span class="n">acfgwr</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">),</span><span class="w"> </span><span class="n">RWLEN</span><span class="p">);</span>
+<span class="kt">int</span><span class="w"> </span><span class="o">*</span><span class="n">spm_data_area</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="n">alloc_spm_addr</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">));</span>
+<span class="kt">int</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span><span class="w"> </span><span class="c1">// 分配一个请求 ID</span>
+<span class="c1">// 发起一次异步内存访问请求</span>
+<span class="n">aload</span><span class="p">(</span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="n">spm_data_area</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">far_mem_to_access</span><span class="p">);</span>
+<span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="n">id</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="n">getfin</span><span class="p">())</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* 做别的事情 */</span><span class="w"> </span><span class="p">}</span>
+<span class="c1">// 通过标准 load/store 指令访问</span>
+<span class="n">printf</span><span class="p">(</span><span class="s">&quot;%d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span><span class="w"> </span><span class="o">*</span><span class="n">spm_space</span><span class="p">);</span>
+</code></pre></div>
+
+<p>对于内存访问密集型程序，我们可以按如下方式使用 AME 发出大量内存访问请求。首先，把程序划分为若干部分。每一部分通常先加载一个远端元素，然后基于它做计算，并不断重复这一过程。其次，把这些 load 替换为 aload，按批次发出，并为每一部分记录请求 ID。当通过 getfin 取回某个已完成的请求 ID 时，程序就对与该 ID 对应的那一部分执行后续计算，并继续为该部分执行完成后的 aload/astore。</p>
+<p>列表 2 给出了一个顺序更新程序的例子。原始程序只有一行：</p>
+<div class="codehilite"><pre><span></span><code><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">n</span><span class="p">;</span><span class="w"> </span><span class="o">++</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="n">L</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="w"> </span><span class="o">^=</span><span class="w"> </span><span class="n">i</span><span class="p">;</span>
+</code></pre></div>
+
+<p>使用 AME 改写后，代码如下：</p>
+<div class="codehilite"><pre><span></span><code><span class="cp">#define NUM_PARTS 256</span>
+<span class="k">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="kt">int</span><span class="w"> </span><span class="n">idx</span><span class="p">;</span><span class="w">               </span><span class="c1">// 当前该部分处理到的索引</span>
+<span class="w">  </span><span class="kt">int</span><span class="w"> </span><span class="n">num_finish</span><span class="p">;</span><span class="w">        </span><span class="c1">// 已完成更新数量</span>
+<span class="w">  </span><span class="kt">int</span><span class="w"> </span><span class="n">stage</span><span class="p">;</span><span class="w">             </span><span class="c1">// 0：需要 aload；1：已经 aload</span>
+<span class="p">}</span><span class="w"> </span><span class="n">update</span><span class="p">[</span><span class="n">NUM_PARTS</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p">];</span>
+
+<span class="kt">int</span><span class="w"> </span><span class="o">*</span><span class="n">spm_addr</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">alloc_spm_addr</span><span class="p">(</span><span class="n">NUM_PARTS</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">));</span>
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">j</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">j</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">NUM_PARTS</span><span class="p">;</span><span class="w"> </span><span class="n">j</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">update</span><span class="p">[</span><span class="n">j</span><span class="p">].</span><span class="n">idx</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">j</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">NUM_PARTS</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">n</span><span class="p">;</span>
+<span class="w">  </span><span class="n">update</span><span class="p">[</span><span class="n">j</span><span class="p">].</span><span class="n">num_finish</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="w">  </span><span class="n">update</span><span class="p">[</span><span class="n">j</span><span class="p">].</span><span class="n">stage</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">j</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">j</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">NUM_PARTS</span><span class="p">;</span><span class="w"> </span><span class="n">j</span><span class="o">++</span><span class="p">)</span>
+<span class="w">  </span><span class="n">aload</span><span class="p">(</span><span class="n">j</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">spm_addr</span><span class="p">[</span><span class="n">j</span><span class="p">],</span><span class="w"> </span><span class="o">&amp;</span><span class="n">L</span><span class="p">[</span><span class="n">update</span><span class="p">[</span><span class="n">j</span><span class="p">].</span><span class="n">idx</span><span class="o">++</span><span class="p">]);</span>
+
+<span class="kt">int</span><span class="w"> </span><span class="n">remain_parts</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">NUM_PARTS</span><span class="p">;</span>
+<span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="n">remain_parts</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">((</span><span class="n">j</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">getfin</span><span class="p">())</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">switch</span><span class="w"> </span><span class="p">(</span><span class="n">update</span><span class="p">[</span><span class="n">j</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">].</span><span class="n">stage</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="k">case</span><span class="w"> </span><span class="mi">0</span><span class="p">:</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">update</span><span class="p">[</span><span class="n">j</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">].</span><span class="n">num_finish</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">NUM_PARTS</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="n">aload</span><span class="p">(</span><span class="n">j</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">spm_addr</span><span class="p">[</span><span class="n">j</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">],</span><span class="w"> </span><span class="o">&amp;</span><span class="n">L</span><span class="p">[</span><span class="n">update</span><span class="p">[</span><span class="n">j</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">].</span><span class="n">idx</span><span class="o">++</span><span class="p">]);</span>
+<span class="w">          </span><span class="n">update</span><span class="p">[</span><span class="n">j</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">].</span><span class="n">stage</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+<span class="w">        </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="n">remain_parts</span><span class="o">--</span><span class="p">;</span>
+<span class="w">        </span><span class="k">break</span><span class="p">;</span>
+<span class="w">      </span><span class="k">case</span><span class="w"> </span><span class="mi">1</span><span class="p">:</span>
+<span class="w">        </span><span class="n">spm_addr</span><span class="p">[</span><span class="n">j</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">]</span><span class="w"> </span><span class="o">^=</span><span class="w"> </span><span class="n">update</span><span class="p">[</span><span class="n">j</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">].</span><span class="n">idx</span><span class="p">;</span>
+<span class="w">        </span><span class="n">astore</span><span class="p">(</span><span class="n">j</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">spm_addr</span><span class="p">[</span><span class="n">j</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">],</span><span class="w"> </span><span class="o">&amp;</span><span class="n">L</span><span class="p">[</span><span class="n">update</span><span class="p">[</span><span class="n">j</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">].</span><span class="n">idx</span><span class="p">]);</span>
+<span class="w">        </span><span class="n">update</span><span class="p">[</span><span class="n">j</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">].</span><span class="n">stage</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="w">        </span><span class="n">update</span><span class="p">[</span><span class="n">j</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">].</span><span class="n">num_finish</span><span class="o">++</span><span class="p">;</span>
+<span class="w">        </span><span class="k">break</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>我们以一个顺序更新程序为例（列表 2 前 2 行）。它循环地从分配在远端内存中的数组 L 里加载元素，对其执行 xor 更新。我们首先通过将更新任务划分为 NUM_PARTS 个部分来改写它。每个部分的执行过程可被描述为一个状态机：首先批量发送 aload 请求；当某个请求完成后，执行计算并发送 astore 请求；待 astore 完成后，继续发送下一轮 aload。为支持这一思路，需要在本地内存中记录每一部分的状态、索引以及已完成更新的数量。列表 2 余下部分展示了基于状态机思想并结合 AME 的改写方式。</p>
+<h3 id="42-cap">4.2 CAP 协程编程框架</h3>
+<p>使用上述范式（状态机）确实可以发出大量异步内存请求，但对于复杂程序而言，它需要精心设计状态机，并对原始程序进行较重的修改。</p>
+<p>因此，我们基于 C++20 协程库实现了一个灵活的编程框架 CAP。CAP 采用 AME 来实现协程的切换与调度方法，例如在 aload 和 astore 之后挂起，在 getfin 返回后恢复。CAP 还基于地址哈希提供了一种本地锁的实现，因此能够保护并发一致性。这样一来，使用 AME 的代码修改就会更容易，也更接近多线程程序的写法，而不必显式地手工修改为“步骤式”的状态机结构。</p>
+<p>列表 3 给出了一个使用 CAP 的更新程序示例：</p>
+<div class="codehilite"><pre><span></span><code><span class="k">template</span><span class="o">&lt;</span><span class="k">typename</span><span class="w"> </span><span class="nc">Scheduler</span><span class="o">&gt;</span>
+<span class="n">coro</span><span class="o">::</span><span class="n">task</span><span class="o">&lt;</span><span class="kt">void</span><span class="o">&gt;</span><span class="w"> </span><span class="n">update</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">idx</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="o">*</span><span class="n">L</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">eachNUPDATE</span><span class="p">,</span><span class="w"> </span><span class="n">Scheduler</span><span class="w"> </span><span class="o">&amp;</span><span class="n">sched</span><span class="p">){</span>
+<span class="w">  </span><span class="kt">int</span><span class="w"> </span><span class="o">*</span><span class="n">spm_addr</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">sched</span><span class="p">.</span><span class="n">alloc_spm_addr</span><span class="p">();</span>
+<span class="w">  </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">idx</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">idx</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">eachNUPDATE</span><span class="p">;</span><span class="w"> </span><span class="o">++</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">co_await</span><span class="w"> </span><span class="n">aload_coro</span><span class="p">(</span><span class="n">spm_addr</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">L</span><span class="p">[</span><span class="n">i</span><span class="p">],</span><span class="w"> </span><span class="n">sched</span><span class="p">);</span>
+<span class="w">    </span><span class="o">*</span><span class="n">spm_addr</span><span class="w"> </span><span class="o">^=</span><span class="w"> </span><span class="n">i</span><span class="p">;</span>
+<span class="w">    </span><span class="k">co_await</span><span class="w"> </span><span class="n">astore_coro</span><span class="p">(</span><span class="n">spm_addr</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">L</span><span class="p">[</span><span class="n">i</span><span class="p">],</span><span class="w"> </span><span class="n">sched</span><span class="p">);</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="w">  </span><span class="n">sched</span><span class="p">.</span><span class="n">release_spm</span><span class="p">(</span><span class="n">spm_addr</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h2 id="5-fpga">5 基于 FPGA 的原型系统</h2>
+<p>我们扩展了 NutShell（一款已经完成流片验证的顺序流水 RISC-V CPU）以支持 AME，并在 Xilinx ZYNQ UltraScale+ ZU19EG MPSoC 板上构建了基于 FPGA 的原型系统进行评估。该板卡的处理系统（PS）上带有四个 ARM Cortex A53 处理器，可帮助我们访问 GPIO 或监控可编程逻辑（PL）中的数据流。</p>
+<p>我们的 FPGA 原型系统为实现了 AME 的 NutShell 提供了两条内存路径。它们映射到不同的地址空间上，特征如下：</p>
+<h3 id="51">5.1 本地内存路径</h3>
+<p>我们使用 ZYNQ 的 PS 侧 AXI_HP 接口。该 HP 端口仅支持 64 个同时进行的请求，但其内存控制器是高频硬逻辑。因此，这一路径符合本地内存的特征：低延迟、低并发。</p>
+<h3 id="52">5.2 仿真的远端内存路径</h3>
+<p>我们使用外接 DDR4 内存作为远端内存。通过实例化软核 Memory Interface Generator（MIG）作为内存控制器，其 AXI AxID 宽度为 32 位，可支持高并发。此外，远端内存响应会经过 Delayer 模块，该模块会在 AXI 的 B 与 R 通道上为所有重叠响应增加一个相同且可调的延迟。</p>
+<p>图 4 展示了 Delayer 的结构及访问方式。它包含一个 256 项的 AXI FIFO（对应系统中最大并发请求数），用于临时保存响应，并通过 xUSER 信号记录每个响应进入 FIFO 时的时间戳，从而精确控制施加在其上的额外延迟。“GateKeeper” 模块负责在 FIFO 出口处，通过控制 AXI 握手信号，释放那些已经等待足够时间的请求。此外，我们把寄存器 <code>Delay</code>（即设置的延迟值）做成 AXI GPIO，并映射到 PS 侧 ARM 核心的地址空间，因此软件可以随时通过访问该地址来调整这个值。</p>
+<p><img alt="图 4：原型系统中的 Delayer 结构与访问方式（所在页）" src="posts/论文阅读/pages/Architecture_and_RISC-V_ISA_Extension_Supporting_Asynchronous_and_Flexible_Parallel_Far_Memory_Access/page-5.png" /></p>
+<p>为了从硬件实时观察飞行中请求的数量，我们在 AMU 中增加了一个计数器，用来记录“已发送请求数”与“已接收请求数”的差值。我们同样把这个计数器做成 AXI GPIO，并映射到 ARM 核的地址空间以便观察。</p>
+<p>表 4 展示了在 FPGA 项目中，SoC 层面实现 AME 前后的资源利用对比：</p>
+<ul>
+<li>LUT：14040 → 16130，增加 14.9%</li>
+<li>FF：12073 → 14656，增加 21.4%</li>
+<li>BRAM + URAM：7.5 + 12 → 6 + 14，增加 2.5%</li>
+<li>LUTRAM：539 → 587，增加 8.9%</li>
+</ul>
+<p><img alt="表 4：实现 AME 前后的 FPGA 资源利用对比（所在页）" src="posts/论文阅读/pages/Architecture_and_RISC-V_ISA_Extension_Supporting_Asynchronous_and_Flexible_Parallel_Far_Memory_Access/page-5.png" /></p>
+<p>注：使用的工具为 Vivado 2019.2，<code>core_clk</code> 为 200MHz，<code>uncore_clk</code> 为 100MHz。</p>
+<p>可以看出，AME 对原有 SoC 的影响较小，尤其是在存储方面，因为它复用了 L2 Cache 中改造为 SPM 的区域。</p>
+<h2 id="6">6 评估</h2>
+<h3 id="61">6.1 基准测试</h3>
+<p>我们使用 6 个基准来评估 AME 在不同内存访问延迟场景下，在原型系统上的性能表现。各基准及工作负载如下：</p>
+<p><strong>Random Access（GUPS）</strong>：我们采用 HPCC Random Access 基准的单节点版本。它持续随机选择内存表中的元素并更新。程序以 GUPS（Giga Updates Per Second）作为性能指标。该表分配在远端内存中，大小为 256MB（总计 32M 个 uint64_t 元素），更新次数为 <code>2^20</code>。</p>
+<p><strong>Sequence Access（SA）</strong>：SA 是由 GUPS 修改而来的顺序内存访问基准。它不再随机访问，而是顺序更新表中的元素。工作负载与 GUPS 相同。</p>
+<p><strong>Hash Join（HJ）</strong>：我们采用 ETH System Group 的多核 Hash Join 基准。它先基于一组元组构建哈希表，然后用另一组关系进行探测。HJ 在远端内存中分配哈希表和关系，每个关系包含 512,000 个随机元组（7.812MB）。性能以每秒处理的元组数衡量。</p>
+<p><strong>Integer Sort（IS）</strong>：IS 是 NAS Parallel Benchmark（NPB）v3.3.0 中的一个并行性能基准。它使用基数排序算法，先对元素高位做中间桶预排序，再完成全量排序，以减少随机访问。我们选择工作负载 W：待排序数组大小为 <code>2^20</code>（8MB，uint64_t 类型），桶大小为 <code>2^10</code>，最大元素值为 <code>2^16</code>；数组放在远端内存中，桶放在本地内存中。性能以运行时间衡量。</p>
+<p><strong>Hash Table with Hand-over-hand Linked List（HL）</strong>：我们采用 ASYCLIB 中的链式哈希表，这是一种由锁保护的并发数据结构。哈希表的每个桶指向一条 hand-over-hand locking 链表，其中存放发生冲突的项。哈希表分配在本地内存中，共 32768 个桶；链表分配在远端内存中，共有 102400 个 key（2MB）。HL 启动 256 个协程，每个协程对 100 个随机 key 操作，其中 70% 为查找，30% 为插入。性能以每秒操作数（op/s）衡量。</p>
+<p><strong>Graph500（G500）</strong>：我们使用 Kronecker 算法构造一个具有 <code>2^16</code> 个节点（16MB）的图，每个节点的度为 16。G500 构建 8 棵 BFS 树，并以顺序表作为数据结构。图和顶点列表都分配在远端内存中。性能以运行时间衡量。</p>
+<h3 id="62">6.2 评估设置</h3>
+<p>我们使用 FPGA 原型系统来模拟一颗 2GHz 处理器在面对不同远端内存访问延迟时的性能。在系统中，NutShell 运行在 200MHz，其时钟周期是 2GHz 的 10 倍。两条 AXI4 内存路径的频率都是 100MHz，这可以对应某些真实处理器中末级缓存与片外部分（uncore）工作频率大约是核心频率一半的情况。</p>
+<p>在实验中，仿真远端内存引入的额外延迟在 0 到 10000 个时钟周期之间，对应到 2GHz 处理器上就是 0 到 10μs。实际中，NVMM 的访问延迟大约在 0.5μs 左右，而带网络延迟或更远位置的机器可能达到 10μs。下文横轴所示的“仿真额外延迟”都已换算为该 2GHz 处理器下的等效值。</p>
+<p>为进行对比，我们在 FPGA 原型系统上同时部署了原始 NutShell（记为 “Origin”）以及实现了 AME 的 NutShell（记为 “AME”）。为更贴近真实运行环境，所有基准都运行在 Debian 11 上。</p>
+<h3 id="63">6.3 结果</h3>
+<p>为便于说明，我们在每个基准中都将“原始 NutShell 在无额外延迟下的性能”归一化为 1。</p>
+<h4 id="_3">基本场景</h4>
+<p>我们首先关注纯粹的远端内存访问性能，其中 SA 与 GUPS 分别关注顺序访问和随机访问。对于 SA，当访问粒度较小（如 8B）时，带 Cache 且利用局部性的原始设计性能优于 AME。但如果使用一次 512B 的大粒度访问，AME 就能更充分利用带宽，因此当延迟大于 1μs 时，性能可提升约 60 倍（图 5(A).g）。</p>
+<p>至于随机访问，图 5(A).f 表明，即使在没有额外延迟时，使用 8B 小粒度的 AME 也比传统方法更灵活、更高效；而在存在额外延迟时，性能可提升约 9 倍。</p>
+<h4 id="ame">AME 的并发能力</h4>
+<p>图 5(B) 表明，支持 AME 的应用能够维持远多于传统架构的请求数，其中平均飞行中请求数达到 238。图 5(C) 则显示，更大的异步内存访问并发度可以显著提升性能。</p>
+<h4 id="_4">实际基准</h4>
+<p>只需快速观察图 5(A) 就会发现，使用 AME 的应用对延迟变化的敏感性更低。G500 展示了 AME 在图计算中的明显加速效果，这类应用通常拥有大数据集且包含大量内存访问。HL 表明，AME 可通过异步内存访问提升并发数据结构的吞吐量。对于像 IS 这类包含大量顺序访问的应用，只要结合可变粒度，AME 同样可以提升性能。</p>
+<p><img alt="图 5：不同延迟与并发度下的性能、飞行中请求数与 GUPS 表现" src="posts/论文阅读/pages/Architecture_and_RISC-V_ISA_Extension_Supporting_Asynchronous_and_Flexible_Parallel_Far_Memory_Access/page-6.png" /></p>
+<p>图 5 的图注原文说明如下，这里一并译出：</p>
+<ul>
+<li>图 5(A) 展示了在最大并发数为 256 时，各基准的性能对比。横轴表示仿真延迟（μs），纵轴表示归一化后的性能值。各柱状图上的标签表示在该延迟下，AME 相对原始实现的加速比。特别地，图 5(A).g 中不同的柱状图表示在不同 aload/astore 粒度下 AME 的性能。</li>
+<li>图 5(B) 展示了在额外仿真延迟为 2μs、最大并发度为 256 时，GUPS 的飞行中请求数量随时间变化的情况。</li>
+<li>图 5(C) 展示了 GUPS 在不同最大并发度设置下的性能。</li>
+</ul>
+<h2 id="7">7 结论与未来工作</h2>
+<p>本文提出了一项研究：通过支持具有可变粒度的显式异步内存访问，来隐藏远端内存的访问延迟并提升 MLP。我们提出了异步内存访问单元（AMU）及其 ISA 扩展（AME）。评估结果表明，在异步编程范式的支持下，内存受限型应用能够更充分地挖掘远端内存的潜力。</p>
+<p>本文工作只给出了实现异步内存访问所需的基本指令和基础结构。在面向真实应用时，操作系统与编译器层面还有更多工作需要完成。此外，只要远端内存子系统支持更丰富的内存语义，这种异步设计也很容易扩展到更多内存扩展方向，例如更复杂的访问模式以及 Processing-In-Memory（PIM）机制。</p>
+<h2 id="_5">参考文献</h2>
+<p>以下保留原文参考文献条目：</p>
+<ol>
+<li>OpenCAPI Specification. 2017.</li>
+<li>Compute Express Link. 2018.</li>
+<li>Gen-Z Specification. 2018.</li>
+<li>Intel optane persistent memory. 2019.</li>
+<li>NutShell: Open Source Chip Project by University. 2020.</li>
+<li>Mikhail Asiatici and Paolo Ienne. Stop crying over your cache miss rate: Handling efficiently thousands of outstanding misses in fpgas. 2019.</li>
+<li>Jonathan Bachrach, Huy Vo, Brian Richards, Yunsup Lee, Andrew Waterman, Rimas Avižienis, John Wawrzynek, and Krste Asanović. Chisel: constructing hardware in a scala embedded language. 2012.</li>
+<li>David Bailey, Tim Harris, William Saphir, Rob Van Der Wijngaart, Alex Woo, and Maurice Yarrow. The NAS parallel benchmarks 2.0. 1995.</li>
+<li>Cagri Balkesen, Jens Teubner, Gustavo Alonso, and M Tamer Özsu. Main-memory hash joins on multi-core CPUs: Tuning to the underlying hardware. 2013.</li>
+<li>Trevor E Carlson, Wim Heirman, Osman Allam, Stefanos Kaxiras, and Lieven Eeckhout. The load slice core microarchitecture. 2015.</li>
+<li>Li-Cheng Chen, Ming-Yu Chen, Yuan Ruan, Yong-Bing Huang, Ze-Han Cui, Tian-Yue Lu, and Yun-Gang Bao. MIMS: Towards a Message Interface Based Memory System. 2014.</li>
+<li>Shimin Chen, Anastassia Ailamaki, Phillip B Gibbons, and Todd C Mowry. Improving hash join performance through prefetching. 2007.</li>
+<li>Tudor David, Rachid Guerraoui, and Vasileios Trigonakis. Asynchronized concurrency: The secret to scaling concurrent search data structures. 2015.</li>
+<li>Yongjun He, Jiacheng Lu, and Tianzheng Wang. CoroBase: coroutine-oriented main-memory database engine. 2020.</li>
+<li>Maurice Herlihy and Nir Shavit. The Art of Multiprocessor Programming. 2012.</li>
+<li>Christopher Jonathan, Umar Farooq Minhas, James Hunter, Justin Levandoski, and Gor Nishanov. Exploiting coroutines to attack the "killer nanoseconds". 2018.</li>
+<li>Vladimir Kiriansky, Haoran Xu, Martin Rinard, and Saman Amarasinghe. Cimple: Instruction and memory level parallelism: A DSL for uncovering ILP and MLP. 2018.</li>
+<li>Onur Kocberber, Babak Falsafi, and Boris Grot. Asynchronous memory access chaining. 2015.</li>
+<li>Kartik Lakshminarasimhan, Ajeya Naithani, Josué Feliu, and Lieven Eeckhout. The Forward Slice Core Microarchitecture. 2020.</li>
+<li>J. Laudon, A. Gupta, and M. Horowitz. Interleaving: A Multithreading Technique Targeting Multiprocessors and Workstations. 1994.</li>
+<li>Huaicheng Li, Daniel S Berger, Stanko Novakovic, Lisa Hsu, Dan Ernst, Pantea Zardoshti, Monish Shah, Ishwar Agarwal, Mark Hill, Marcus Fontoura, et al. First-generation Memory Disaggregation for Cloud Platforms. 2022.</li>
+<li>Piotr R Luszczek, David H Bailey, Jack J Dongarra, Jeremy Kepner, Robert F Lucas, Rolf Rabenseifner, and Daisuke Takahashi. The HPC Challenge (HPCC) benchmark suite. 2006.</li>
+<li>Richard C Murphy, Kyle B Wheeler, Brian W Barrett, and James A Ang. Introducing the Graph 500. 2010.</li>
+<li>Christian Pinto, Dimitris Syrivelis, Michele Gazzetti, Panos Koutsovasilis, Andrea Reale, Kostas Katrinis, and H. Peter Hofstee. ThymesisFlow: A Software-Defined, HW/SW co-Designed Interconnect Stack for Rack-Scale Memory Disaggregation. 2020.</li>
+<li>Michael Schwarz, Moritz Lipp, Daniel Moghimi, Jo Van Bulck, Julian Stecklina, Thomas Prescher, and Daniel Gruss. ZombieLoad: Cross-privilege-boundary data sampling. 2019.</li>
+<li>James Tuck, Luis Ceze, and Josep Torrellas. Scalable cache miss handling for high memory-level parallelism. 2006.</li>
+<li>Luming Wang, Xu Zhang, Tianyue Lu, and Mingyu Chen. Asynchronous memory access unit for general purpose processors. 2022.</li>
+</ol>
+<h2 id="_6">附：含图表的论文原页（兜底保留）</h2>
+<p><img alt="第1页" src="posts/论文阅读/pages/Architecture_and_RISC-V_ISA_Extension_Supporting_Asynchronous_and_Flexible_Parallel_Far_Memory_Access/page-1.png" />
+<img alt="第2页" src="posts/论文阅读/pages/Architecture_and_RISC-V_ISA_Extension_Supporting_Asynchronous_and_Flexible_Parallel_Far_Memory_Access/page-2.png" />
+<img alt="第3页" src="posts/论文阅读/pages/Architecture_and_RISC-V_ISA_Extension_Supporting_Asynchronous_and_Flexible_Parallel_Far_Memory_Access/page-3.png" />
+<img alt="第4页" src="posts/论文阅读/pages/Architecture_and_RISC-V_ISA_Extension_Supporting_Asynchronous_and_Flexible_Parallel_Far_Memory_Access/page-4.png" />
+<img alt="第5页" src="posts/论文阅读/pages/Architecture_and_RISC-V_ISA_Extension_Supporting_Asynchronous_and_Flexible_Parallel_Far_Memory_Access/page-5.png" />
+<img alt="第6页" src="posts/论文阅读/pages/Architecture_and_RISC-V_ISA_Extension_Supporting_Asynchronous_and_Flexible_Parallel_Far_Memory_Access/page-6.png" />
+<img alt="第7页" src="posts/论文阅读/pages/Architecture_and_RISC-V_ISA_Extension_Supporting_Asynchronous_and_Flexible_Parallel_Far_Memory_Access/page-7.png" /></p>

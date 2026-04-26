@@ -1,0 +1,33 @@
+<h1 id="softether-vpn-server-dhcpd">SoftEther VPN Server + DHCPD</h1>
+<div class="codehilite"><pre><span></span><code><span class="ch">#!/bin/bash</span>
+
+<span class="c1"># ----- 全部要用到的配置</span>
+<span class="c1"># 要配置到VPN Tap设备上的IP,需要写成CIDR形式</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">SERVER_IP_CIDR</span><span class="o">=</span><span class="s2">&quot;192.168.88.1/24&quot;</span>
+<span class="c1"># --- dhcpd.conf中的格式</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">SERVER_IP</span><span class="o">=</span><span class="s2">&quot;192.168.88.1&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">SUBNET</span><span class="o">=</span><span class="s2">&quot;192.168.88.0&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">SUBNET_NETMASK</span><span class="o">=</span><span class="s2">&quot;255.255.255.0&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">DHCP_RANGE</span><span class="o">=</span><span class="s2">&quot;192.168.88.100 192.168.88.254&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">BROADCAST_ADDR</span><span class="o">=</span><span class="s2">&quot;192.168.88.255&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">GATEWAY_IP</span><span class="o">=</span><span class="si">${</span><span class="nv">SERVER_IP</span><span class="si">}</span>
+<span class="c1"># --- VPN端口名，与创建的Tap设备保持一致</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">VPN_IF_NAME</span><span class="o">=</span><span class="s2">&quot;tap_softether&quot;</span>
+<span class="c1"># --- iptables规则所需环境变量</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">VPN_IF</span><span class="o">=</span><span class="si">${</span><span class="nv">VPN_IF_NAME</span><span class="si">}</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">WAN_IF</span><span class="o">=</span><span class="s2">&quot;eth0&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">WAN6_IF</span><span class="o">=</span><span class="s2">&quot;eth0&quot;</span>
+<span class="c1"># --- VPN用户名</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">VPN_USERNAME</span><span class="o">=</span><span class="s2">&quot;luzeyu&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">VPN_PASSWD</span><span class="o">=</span><span class="s2">&quot;luzeyu&quot;</span>
+
+<span class="c1"># ----- 安装</span>
+apt<span class="w"> </span>install<span class="w"> </span>softether-vpnserver
+
+<span class="c1"># ----- 配置</span>
+<span class="c1"># --- 配置VPN Server</span>
+<span class="c1"># vpncmd</span>
+<span class="c1"># &quot;1\n&quot; 1. Management of VPN Server or VPN Bridge </span>
+<span class="c1"># &quot;127.0.0.1:5555\n&quot; the host name or IP address of the VPN Server </span>
+<span class="c1"># &quot;\n&quot; If connecting by server admin mode</span>
+</code></pre></div>

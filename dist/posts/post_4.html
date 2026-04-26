@@ -1,0 +1,47 @@
+<h1 id="qemu-systemc">QEMU SystemC协同仿真</h1>
+<p>环境：http://100.122.249.83:8080/</p>
+<p>https://patchwork.kernel.org/</p>
+<h2 id="_1">实验方法</h2>
+<h2 id="_2">实验命令</h2>
+<h3 id="buildroot">构建并运行官方Buildroot</h3>
+<div class="codehilite"><pre><span></span><code>make<span class="w"> </span>qemu_aarch64_virt_defconfig
+</code></pre></div>
+
+<h3 id="systemcdemo">运行SystemC端演示demo</h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># PWD at `/media/luzeyu/Files/ysyx/xilinx-cosim/systemctlm-cosim-demo`</span>
+<span class="nv">LD_LIBRARY_PATH</span><span class="o">=</span><span class="s2">&quot;/media/luzeyu/Files/ysyx/xilinx-cosim/systemc-2.3.2/install/lib-linux64/&quot;</span><span class="w"> </span>./zynq_demo<span class="w"> </span>unix:/media/luzeyu/Ext4Storage/cosim/buildroot/handles/qemu-rport-_cosim@0<span class="w"> </span><span class="m">1000000</span>
+
+<span class="c1"># PWD at `/media/luzeyu/Files/ysyx/xilinx-cosim/qemu/install`</span>
+./usr/local/bin/qemu-system-aarch64<span class="w"> </span>-M<span class="w"> </span>arm-generic-fdt-7series<span class="w"> </span>-m<span class="w"> </span>1G<span class="w"> </span><span class="se">\</span>
+-kernel<span class="w"> </span>/media/luzeyu/Ext4Storage/cosim/buildroot/output/images/uImage<span class="w"> </span><span class="se">\</span>
+-dtb<span class="w"> </span>/media/luzeyu/Ext4Storage/cosim/buildroot/output/images/zynq-zc702.dtb<span class="w"> </span><span class="se">\</span>
+--initrd<span class="w"> </span>/media/luzeyu/Ext4Storage/cosim/buildroot/output/images/rootfs.cpio.gz<span class="w"> </span><span class="se">\</span>
+-serial<span class="w"> </span>/dev/null<span class="w"> </span>-serial<span class="w"> </span>mon:stdio<span class="w"> </span>-display<span class="w"> </span>none<span class="w"> </span>-net<span class="w"> </span>nic<span class="w"> </span>-net<span class="w"> </span>nic<span class="w"> </span><span class="se">\</span>
+-machine-path<span class="w"> </span>/media/luzeyu/Ext4Storage/cosim/buildroot/handles/<span class="w"> </span><span class="se">\</span>
+-icount<span class="w"> </span><span class="m">0</span>,sleep<span class="o">=</span>off<span class="w"> </span>-rtc<span class="w"> </span><span class="nv">clock</span><span class="o">=</span>vm<span class="w"> </span>-sync-quantum<span class="w"> </span><span class="m">1000000</span>
+</code></pre></div>
+
+<h2 id="faq">FAQ</h2>
+<ul>
+<li>
+<p>使用Ctrl+A x退出QEMU</p>
+</li>
+<li>
+<p>clangd无法索引</p>
+</li>
+<li>
+<p>在buildroot根目录创建<code>.clangd</code>文件</p>
+<p><code>CompileFlags:
+    Remove: -mabi=lp64</code></p>
+</li>
+<li>
+<p>报错 内核header版本不符</p>
+</li>
+<li>
+<p>不要忘记修改Toolchain -&gt; Kernel Headers</p>
+</li>
+<li>
+<p><code>network backend 'user' is not compiled into this binary</code></p>
+</li>
+<li><code>--enable-slirp</code>即可</li>
+</ul>

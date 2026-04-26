@@ -1,0 +1,114 @@
+<h1 id="gdb">GDB常用命令</h1>
+<h2 id="_1">源码搜索路径</h2>
+<h3 id="_2">将编译路径映射到实际的源码路径</h3>
+<ul>
+<li><code>set substitute-path &lt;cpath&gt; &lt;spath&gt;</code> </li>
+<li><code>&lt;cpath&gt;</code> 编译时的源代码路径</li>
+<li><code>&lt;spath&gt;</code> 本机上的源代码路径</li>
+<li>举例：<code>set substitute-path /tmp/tmp/oneDNN-3.5.3/src/ /root/oneDNN-3.5.3/src</code></li>
+<li>参见：动态库调试方法</li>
+</ul>
+<h2 id="_3">执行控制</h2>
+<h3 id="_4">断点</h3>
+<p><code>set breakpoint pending on</code></p>
+<ul>
+<li><code>b &lt;exp&gt;</code></li>
+<li><code>&lt;exp&gt;</code> 格式<ul>
+<li><code>int</code> 一个整数，表示断点在源代码中的行号</li>
+<li><code>+int</code> | <code>-int</code> 一个偏移量，表示断点相对于当前行号的偏移量</li>
+<li><code>str</code> 函数名</li>
+<li><code>path : str</code> 在源文件path中的函数名</li>
+</ul>
+</li>
+<li><code>d &lt;num&gt;</code> 删除断点，num可以从<code>info b</code>获得</li>
+<li><code>info b</code> 显示所有的断点信息</li>
+</ul>
+<h3 id="_5">执行</h3>
+<ul>
+<li><code>r</code> /  <code>run</code> 开始执行</li>
+<li><code>s</code> / <code>step</code> 源代码单步执行，不步入语句</li>
+<li><code>n</code> / <code>next</code> 汇编单步执行，不进入分支</li>
+<li><code>si</code> 源代码步入执行</li>
+<li><code>finish</code> 步出，完成当前函数</li>
+<li><code>ni</code> 汇编步入执行</li>
+<li><code>c</code> 继续执行到下一个断点或错误</li>
+<li><code>j &lt;num&gt;</code> / <code>jump &lt;num&gt;</code> 跳转到第num行执行完毕之后</li>
+<li><code>return &lt;exp&gt;</code> 强制函数返回表达式的值</li>
+</ul>
+<h2 id="_6">内存控制</h2>
+<h3 id="_7">读内存</h3>
+<ul>
+<li><code>x /&lt;num&gt;&lt;format&gt;&lt;width&gt; &lt;addr&gt;</code></li>
+<li><code>&lt;num&gt;</code>：一个整数，表示从地址addr开始要显示几个数据</li>
+<li><code>&lt;format&gt;</code>：<code>x|d|u|o|t|c</code> 显示格式，分别表 示hex、dec、unsigned dec、oct、bin、char</li>
+<li><code>&lt;width&gt;</code>：<code>b|h|w|g</code> 每个数据的字节长，分别表示byte、half word、word、dword</li>
+<li><code>&lt;addr&gt;</code>：<code>hex|&lt;exp&gt;</code> 起始地址，可以是一个地址或是一个表达式</li>
+</ul>
+<h2 id="_8">寄存器控制</h2>
+<ul>
+<li></li>
+</ul>
+<h2 id="_9">信息显示</h2>
+<h3 id="_10">显示断点</h3>
+<ul>
+<li><code>info b</code>  <code>i b</code> 显示所有的断点信息</li>
+<li><code>info r</code> <code>i r</code> 显示寄存器信息</li>
+</ul>
+<h3 id="_11">删除断点</h3>
+<ul>
+<li><code>del &lt;brk_num&gt;</code></li>
+</ul>
+<h3 id="_12">显示源码</h3>
+<ul>
+<li><code>l</code> 继续显示上一次list的内容</li>
+<li><code>l &lt;exp&gt;</code></li>
+<li><code>&lt;exp&gt;</code>可以是行号/函数名</li>
+</ul>
+<h3 id="_13">显示汇编</h3>
+<ul>
+<li><code>set disassemble-next-line on</code></li>
+</ul>
+<h3 id="_14">显示堆栈</h3>
+<ul>
+<li><code>bt</code> 显示当前函数调用栈</li>
+<li><code>bt full</code>  显示当前函数调用栈</li>
+</ul>
+<h3 id="_15">切换栈帧</h3>
+<ul>
+<li><code>frame &lt;id&gt;</code></li>
+</ul>
+<h3 id="_16">显示数据</h3>
+<ul>
+<li><code>print &lt;exp&gt;</code> <code>p &lt;exp&gt;</code> 打印寄存器</li>
+</ul>
+<h3 id="_17">显示其他信息</h3>
+<ul>
+<li><code>info program</code> 显示程序执行状态</li>
+</ul>
+<h2 id="_18">多线程</h2>
+<h3 id="_19">选中线程</h3>
+<ul>
+<li><code>thread &lt;num&gt;</code> 操作指定的线程，后续设置的断点就仅对当前线程生效</li>
+<li><code>&lt;num&gt;</code> : 一个线程的ID</li>
+</ul>
+<h2 id="_20">系统</h2>
+<h3 id="_21">环境变量</h3>
+<ul>
+<li><code>set environment &lt;key&gt;=&lt;value&gt;</code> : 设置环境变量</li>
+<li>只会在程序执行前生效</li>
+<li>如果在VS Code里调试，只需在当前终端里用export的方式定义环境变量即可</li>
+</ul>
+<h3 id="_22">产生信号量</h3>
+<ul>
+<li><code>signal</code></li>
+</ul>
+<h2 id="_23">界面</h2>
+<h3 id="_24">视图</h3>
+<ul>
+<li><code>layout asm</code> 显示汇编视图</li>
+<li><code>layout regs</code> 显示寄存器视图</li>
+<li><code>layout split</code> 分屏显示源码与汇编</li>
+</ul>
+<h2 id="ide">IDE调试原理</h2>
+<p><img alt="Screenshot_20241127_132227" src="posts/工具与规范/GDB常用命令.assets/Screenshot_20241127_132227.png" /></p>
+<p>使用<code>--interpreter=mi</code>参数，进行输入输出重定向</p>

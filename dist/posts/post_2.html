@@ -1,3 +1,29 @@
-<h1 id="_1">生活随笔</h1>
-<p>今天天气不错，开始动手写博客了。</p>
-<p>希望这个系统能记录下更多有趣的时刻！</p>
+<h2 id="fsm">有限状态机FSM</h2>
+<blockquote>
+<p>表示有限个<a href="https://zh.wikipedia.org/wiki/状态">状态</a>以及在这些状态之间的转移和动作等行为的<a href="https://zh.wikipedia.org/wiki/计算模型_(数学)">数学计算模型</a>。</p>
+<p><img src="posts/计算机基础/状态机.assets/225px-Finite_state_machine_example_with_comments.svg.png" alt="img"  /></p>
+<p>（来自Wikipedia）</p>
+<p>自动机是一个对信号序列进行判定的数学模型。</p>
+<p>如果需要判定一个有限的信号序列和另外一个信号序列的关系（例如另一个信号序列是不是某个信号序列的子序列），那么常用的方法是针对那个有限的信号序列构建一个自动机。</p>
+<p>自动机只是一个 <strong>数学模型</strong>，而 <strong>不是算法</strong>，也 <strong>不是数据结构</strong>。实现同一个自动机的方法有很多种，可能会有不一样的时空复杂度。</p>
+<p>一个 <strong>确定有限状态自动机（DFA）</strong> 由以下五部分构成：</p>
+<ol>
+<li><strong>字符集</strong>（$\Sigma$），该自动机只能输入这些字符。</li>
+<li><strong>状态集合</strong>（$Q$）。如果把一个 DFA 看成一张有向图，那么 DFA 中的状态就相当于图上的顶点。</li>
+<li><strong>起始状态</strong>（$start$），$start \in Q$，是一个特殊的状态。起始状态一般用$s$表示，为了避免混淆，本文中使用$start$。</li>
+<li><strong>接受状态集合</strong>（$F$），$ F\subseteq Q $，是一组特殊的状态。</li>
+<li><strong>转移函数</strong>（$\delta$），<img alt="\delta" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" /> 是一个接受两个参数返回一个值的函数，其中第一个参数和返回值都是一个状态，第二个参数是字符集中的一个字符。如果把一个 DFA 看成一张有向图，那么 DFA 中的转移函数就相当于顶点间的边，而每条边上都有一个字符。</li>
+</ol>
+<p>DFA 的作用就是识别字符串，一个自动机 <img alt="A" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" />，若它能识别（接受）字符串 <img alt="S" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" />，那么 <img alt="A(S)=\mathrm{True}" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" />，否则 <img alt="A(S)=\mathrm{False}" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" />。</p>
+<p>当一个 DFA 读入一个字符串时，从初始状态起按照转移函数一个一个字符地转移。如果读入完一个字符串的所有字符后位于一个接受状态，那么我们称这个 DFA <strong>接受</strong> 这个字符串，反之我们称这个 DFA <strong>不接受</strong> 这个字符串。</p>
+<p>（来自OI Wiki）</p>
+</blockquote>
+<p>几种动作：</p>
+<ul>
+<li>进入动作</li>
+<li>退出动作</li>
+<li>输入动作</li>
+<li>转移动作</li>
+</ul>
+<h3 id="moore">Moore型</h3>
+<h3 id="mealy">Mealy型</h3>

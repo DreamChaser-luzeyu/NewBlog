@@ -1,0 +1,169 @@
+<p>本文档由 AI 总结，可能有错误。</p>
+<p>这篇论文研究的是：当芯片越来越复杂时，只靠软件去跑 Verilog 仿真会非常慢，动不动就要跑很多天，严重拖慢开发和验证。作者想解决的是，怎样在尽量不牺牲调试能力和精度的前提下，用 FPGA 把周期精确硬件模型加速起来，并进一步把它接进混合仿真平台里，让大规模 SoC 级联调也能更快完成。论文的做法是：把 Verilog 电路自动转换成适合 FPGA 加速和精确控制的模型，自动生成接口，再分别接入基于 Zynq 和基于 QEMU 的混合仿真平台，最后通过 FFT 和系统级实验验证其正确性与加速效果。</p>
+<h2 id="_1">论文信息</h2>
+<ul>
+<li>标题：混合仿真平台中周期精确硬件模型 FPGA 加速实现</li>
+<li>作者：郑宇辰</li>
+<li>类型：硕士论文</li>
+<li>学校：哈尔滨工业大学</li>
+<li>时间：2023 年 5 月</li>
+</ul>
+<h2 id="_2">研究问题</h2>
+<p>论文要解决三个直接痛点：</p>
+<ol>
+<li>RTL/Verilog 的软件仿真速度太慢，难以支撑大规模验证。</li>
+<li>传统 FPGA 原型虽然快，但调试和周期级控制能力不足。</li>
+<li>单纯的软件仿真或硬件仿真都不够灵活，系统级 SoC 验证需要混合方案。</li>
+</ol>
+<p>作者核心关注的是：如何构建一种既能在 FPGA 上高速执行、又能按周期精确控制、还能方便和软件仿真模型协作的硬件仿真模型。</p>
+<h2 id="_3">背景与动机</h2>
+<p>论文把现有仿真技术分成三类：</p>
+<ul>
+<li>指令级仿真</li>
+<li>事务级仿真</li>
+<li>周期精确级仿真</li>
+</ul>
+<p>其中周期精确仿真最细、最准，但也是最慢的。作者认为，真正需要被加速的是这类高精度模型；同时又希望保留软件平台的灵活性，所以最终目标不是单纯做一个 FPGA 加速器，而是做一个可进入混合仿真平台的周期精确硬件模型。</p>
+<h2 id="_4">主要方法</h2>
+<h3 id="1-verilog">1. 将 Verilog 电路自动转换为周期精确硬件模型</h3>
+<p>论文借鉴 LI-BDN（Latency-Insensitive Bounded Dataflow Networks）思想，把普通同步时序电路变换成更适合受控执行的形式，使电路在 FPGA 上运行时仍能按周期级别进行驱动、暂停和观测。</p>
+<p>作者在 Yosys 中新增 Pass，直接修改 RTLIL 中间表示，完成：</p>
+<ul>
+<li>电路 LI-BDN 化</li>
+<li>周期精确硬件模型自动生成</li>
+<li>对应硬件接口自动生成</li>
+</ul>
+<p>这意味着，用户不需要手工重写大量 RTL，就能把原始 Verilog 变成可用于仿真加速的模型。</p>
+<h3 id="2">2. 设计硬件接口与软件接口</h3>
+<p>为了让硬件模型能接入更大的仿真系统，作者设计了两层接口：</p>
+<ul>
+<li>硬件侧接口：负责控制模型运行、输入激励、提取信号</li>
+<li>软件侧接口：向上层仿真程序提供 API，便于测试程序和软件模型调用</li>
+</ul>
+<p>这样，硬件模型不再只是“能跑”，而是变成“能被系统化驱动和联调”的部件。</p>
+<h3 id="3">3. 实现两种混合仿真平台</h3>
+<p>论文实现了两种代表性平台：</p>
+<h4 id="zynq">基于 Zynq 的嵌入式混合仿真平台</h4>
+<p>重点是：</p>
+<ul>
+<li>利用 Zynq 的软硬件协同特点</li>
+<li>通过 AXI 等机制完成软硬件通信</li>
+<li>设计适合扩展的软件 API 和软件激励方案</li>
+</ul>
+<h4 id="qemu">基于 QEMU 的混合仿真平台</h4>
+<p>在已有 Zynq 平台基础上继续扩展：</p>
+<ul>
+<li>把 QEMU 软件模拟器接入系统</li>
+<li>在 Zynq 端增加与 QEMU 通信的模块</li>
+<li>完成事务级信号与周期级/引脚级信号之间的转换</li>
+</ul>
+<p>这样就能在更真实的系统上下文里做验证，例如让软件栈通过 QEMU 访问 FPGA 中加速的硬件外设模型。</p>
+<h2 id="_5">实验与结果</h2>
+<p>论文主要从三个层面验证方法有效性：</p>
+<h3 id="1">1. 自动化生成正确性</h3>
+<p>作者用开源 FFT IP 核测试自动化流程，对比：</p>
+<ul>
+<li>编译器处理前后的电路结构</li>
+<li>关键波形</li>
+</ul>
+<p>结果表明，自动生成的周期精确硬件模型保持了原始设计语义，功能正确。</p>
+<h3 id="2_1">2. 仿真加速能力</h3>
+<p>在实现软件激励后，论文评估了基于 FPGA 的硬件加速效果。结论是：</p>
+<ul>
+<li>周期精确模型可以在保持较好调试能力的前提下显著提高运行效率</li>
+<li>对大规模电路验证更有价值</li>
+</ul>
+<h3 id="3_1">3. 混合仿真平台有效性</h3>
+<p>作者分别验证了：</p>
+<ul>
+<li>基于 Zynq 的嵌入式混合仿真平台</li>
+<li>基于 QEMU 的系统级混合仿真平台</li>
+</ul>
+<p>其中通过 QEMU 中的软件模型访问 APB 3.0 SRAM 电路，证明整个系统级链路能够正常工作。</p>
+<h2 id="_6">论文结论</h2>
+<p>论文最终完成了四项关键成果：</p>
+<ol>
+<li>在 Yosys 中实现周期精确硬件模型自动生成流程。</li>
+<li>实现基于 Zynq 的嵌入式混合仿真平台。</li>
+<li>实现基于 QEMU 的混合仿真平台。</li>
+<li>用 FFT 与系统级访问实验验证了自动化流程、仿真加速能力与平台正确性。</li>
+</ol>
+<p>作者同时指出了后续改进方向：</p>
+<ul>
+<li>目前 LI-BDN 化主要针对顶层模块，未来可扩展到更多层级</li>
+<li>硬件接口仍有进一步提速空间</li>
+<li>Zynq 与主机之间目前使用以太网通信，未来可升级为 PCIe 等更高速链路</li>
+</ul>
+<h2 id="_7">我的理解</h2>
+<p>这篇论文的价值不只是“把仿真跑快一点”，而是把“可调试的周期精确硬件模型”“自动化编译工具链”“混合仿真平台”三件事连起来了。它很适合以下场景：</p>
+<ul>
+<li>芯片外设或 IP 核验证</li>
+<li>SoC 软硬件协同联调</li>
+<li>软件栈尚未完善时的系统级原型验证</li>
+<li>需要兼顾精度、速度、成本的研究型平台</li>
+</ul>
+<p>从工程视角看，这项工作的重点不是追求商业仿真器那种极致能力，而是在开源工具链和较低成本 FPGA 条件下，做出可落地、可扩展、可复现的方案。</p>
+<h2 id="_8">论文原页图像（逐页保留，含全部图表）</h2>
+<p><img alt="第1页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-01.png" />
+<img alt="第2页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-02.png" />
+<img alt="第3页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-03.png" />
+<img alt="第4页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-04.png" />
+<img alt="第5页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-05.png" />
+<img alt="第6页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-06.png" />
+<img alt="第7页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-07.png" />
+<img alt="第8页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-08.png" />
+<img alt="第9页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-09.png" />
+<img alt="第10页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-10.png" />
+<img alt="第11页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-11.png" />
+<img alt="第12页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-12.png" />
+<img alt="第13页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-13.png" />
+<img alt="第14页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-14.png" />
+<img alt="第15页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-15.png" />
+<img alt="第16页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-16.png" />
+<img alt="第17页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-17.png" />
+<img alt="第18页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-18.png" />
+<img alt="第19页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-19.png" />
+<img alt="第20页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-20.png" />
+<img alt="第21页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-21.png" />
+<img alt="第22页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-22.png" />
+<img alt="第23页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-23.png" />
+<img alt="第24页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-24.png" />
+<img alt="第25页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-25.png" />
+<img alt="第26页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-26.png" />
+<img alt="第27页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-27.png" />
+<img alt="第28页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-28.png" />
+<img alt="第29页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-29.png" />
+<img alt="第30页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-30.png" />
+<img alt="第31页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-31.png" />
+<img alt="第32页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-32.png" />
+<img alt="第33页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-33.png" />
+<img alt="第34页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-34.png" />
+<img alt="第35页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-35.png" />
+<img alt="第36页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-36.png" />
+<img alt="第37页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-37.png" />
+<img alt="第38页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-38.png" />
+<img alt="第39页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-39.png" />
+<img alt="第40页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-40.png" />
+<img alt="第41页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-41.png" />
+<img alt="第42页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-42.png" />
+<img alt="第43页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-43.png" />
+<img alt="第44页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-44.png" />
+<img alt="第45页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-45.png" />
+<img alt="第46页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-46.png" />
+<img alt="第47页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-47.png" />
+<img alt="第48页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-48.png" />
+<img alt="第49页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-49.png" />
+<img alt="第50页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-50.png" />
+<img alt="第51页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-51.png" />
+<img alt="第52页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-52.png" />
+<img alt="第53页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-53.png" />
+<img alt="第54页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-54.png" />
+<img alt="第55页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-55.png" />
+<img alt="第56页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-56.png" />
+<img alt="第57页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-57.png" />
+<img alt="第58页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-58.png" />
+<img alt="第59页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-59.png" />
+<img alt="第60页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-60.png" />
+<img alt="第61页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-61.png" />
+<img alt="第62页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-62.png" />
+<img alt="第63页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-63.png" /></p>

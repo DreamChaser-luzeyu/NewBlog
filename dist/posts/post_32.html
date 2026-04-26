@@ -1,0 +1,522 @@
+<h1 id="softether-vpn">SoftEther VPN 配置</h1>
+<h2 id="tcp">TCP窗口优化</h2>
+<div class="codehilite"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">WINDOW_SIZE</span><span class="o">=</span><span class="m">22000000</span><span class="w">  </span><span class="c1"># 计算：800(Mbps) * 0.15(s) / 8(bits/byte) = 15(MB)</span>
+sysctl<span class="w"> </span>-w<span class="w"> </span>net.core.rmem_max<span class="o">=</span><span class="si">${</span><span class="nv">WINDOW_SIZE</span><span class="si">}</span><span class="w"> </span><span class="c1"># 系统限制</span>
+sysctl<span class="w"> </span>-w<span class="w"> </span>net.core.wmem_max<span class="o">=</span><span class="si">${</span><span class="nv">WINDOW_SIZE</span><span class="si">}</span>
+sysctl<span class="w"> </span>-w<span class="w"> </span>net.ipv4.tcp_rmem<span class="o">=</span><span class="s2">&quot;4096 87380 </span><span class="si">${</span><span class="nv">WINDOW_SIZE</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span><span class="c1"># 单个应用限制</span>
+sysctl<span class="w"> </span>-w<span class="w"> </span>net.ipv4.tcp_wmem<span class="o">=</span><span class="s2">&quot;4096 87380 </span><span class="si">${</span><span class="nv">WINDOW_SIZE</span><span class="si">}</span><span class="s2">&quot;</span>
+sysctl<span class="w"> </span>-p
+</code></pre></div>
+
+<h2 id="_1">服务端配置</h2>
+<h3 id="_2">初始化环境变量</h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># 重新连接以确保清除先前的环境变量</span>
+<span class="c1"># 要配置到VPN Tap设备上的IP,需要写成CIDR形式</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">SERVER_IP_CIDR</span><span class="o">=</span><span class="s2">&quot;192.168.88.1/24&quot;</span>
+<span class="c1"># --- dhcpd.conf中的格式</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">SERVER_IP</span><span class="o">=</span><span class="s2">&quot;192.168.88.1&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">SUBNET</span><span class="o">=</span><span class="s2">&quot;192.168.88.0&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">SUBNET_NETMASK</span><span class="o">=</span><span class="s2">&quot;255.255.255.0&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">DHCP_RANGE</span><span class="o">=</span><span class="s2">&quot;192.168.88.100 192.168.88.254&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">BROADCAST_ADDR</span><span class="o">=</span><span class="s2">&quot;192.168.88.255&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">GATEWAY_IP</span><span class="o">=</span><span class="si">${</span><span class="nv">SERVER_IP</span><span class="si">}</span>
+<span class="c1"># --- VPN端口名，与创建的Tap设备保持一致</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">VPN_IF_NAME</span><span class="o">=</span><span class="s2">&quot;tap_softether&quot;</span>
+<span class="c1"># --- iptables规则所需环境变量</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">VPN_IF</span><span class="o">=</span><span class="si">${</span><span class="nv">VPN_IF_NAME</span><span class="si">}</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">WAN_IF</span><span class="o">=</span><span class="s2">&quot;eth0&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">WAN6_IF</span><span class="o">=</span><span class="s2">&quot;eth0&quot;</span>
+</code></pre></div>
+
+<h3 id="vpn-server">安装VPN Server</h3>
+<div class="codehilite"><pre><span></span><code>sudo<span class="w"> </span>apt<span class="w"> </span>update<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>isc-dhcp-server<span class="w"> </span>softether-vpnserver
+</code></pre></div>
+
+<h3 id="sing-box-reality">安装Sing-box REALITY</h3>
+<div class="codehilite"><pre><span></span><code>cat<span class="w"> </span>/tmp/sing-box.py<span class="w"> </span><span class="s">&lt;&lt; EOF</span>
+<span class="s">import os</span>
+<span class="s">from string import Template</span>
+
+<span class="s">GITHUB_MIRROR = &#39;https://app.dreamchaser-luzeyu.cn/gh/&#39;</span>
+
+<span class="s">INSTALL_PATH = &#39;/usr/local/bin&#39;</span>
+<span class="s">SERVICE_PATH = &#39;/usr/lib/systemd/system/&#39;</span>
+<span class="s">CFG_FILE_DIR = &#39;/etc/&#39;</span>
+
+<span class="s">SERVICE_TEMPLATE = &#39;&#39;&#39;</span>
+<span class="s">[Unit]</span>
+<span class="s">Description={service_desc}</span>
+<span class="s">After=network.target</span>
+
+<span class="s">[Service]</span>
+<span class="s">Type=simple</span>
+<span class="s">ExecStart={service_cmd}</span>
+<span class="s">Restart=always</span>
+
+<span class="s">[Install]</span>
+<span class="s">WantedBy=multi-user.target</span>
+<span class="s">&#39;&#39;&#39;</span>
+
+<span class="s">SINGBOX_TEMPLATE = &#39;&#39;&#39;</span>
+<span class="s">{</span>
+<span class="s">    &quot;log&quot;: {</span>
+<span class="s">        &quot;disabled&quot;: false,</span>
+<span class="s">        &quot;level&quot;: &quot;info&quot;,</span>
+<span class="s">        &quot;timestamp&quot;: true</span>
+<span class="s">    },</span>
+<span class="s">    &quot;inbounds&quot;: [</span>
+<span class="s">        {</span>
+<span class="s">            &quot;type&quot;: &quot;vless&quot;,</span>
+<span class="s">            &quot;tag&quot;: &quot;vless-brutal-reality-in&quot;,</span>
+<span class="s">            &quot;listen&quot;: &quot;::&quot;,</span>
+<span class="s">            &quot;listen_port&quot;: ${server_listen_port},</span>
+<span class="s">            &quot;sniff&quot;: true,</span>
+<span class="s">            &quot;sniff_override_destination&quot;: true,</span>
+<span class="s">            &quot;users&quot;: [</span>
+<span class="s">                {</span>
+<span class="s">                    &quot;uuid&quot;: &quot;${vless_uuid}&quot;,</span>
+<span class="s">                    &quot;flow&quot;: &quot;&quot;</span>
+<span class="s">                }</span>
+<span class="s">            ],</span>
+<span class="s">            &quot;tls&quot;: {</span>
+<span class="s">                &quot;enabled&quot;: true,</span>
+<span class="s">                // 可自定义修改，可以不改，但是推荐用https://bgp.tools/去扫你VPS或独服同IP网段里的网站延迟低</span>
+<span class="s">                &quot;server_name&quot;: &quot;${reality_server_name}&quot;,</span>
+<span class="s">                &quot;reality&quot;: {</span>
+<span class="s">                    &quot;enabled&quot;: true,</span>
+<span class="s">                    &quot;handshake&quot;: {</span>
+<span class="s">                        // 可自定义修改，可以不改，但是推荐用https://bgp.tools/去扫你VPS或独服同IP网段里的网站延迟低</span>
+<span class="s">                        &quot;server&quot;: &quot;${reality_server_name}&quot;,</span>
+<span class="s">                        &quot;server_port&quot;: 443</span>
+<span class="s">                    },</span>
+<span class="s">                    // 执行 sing-box generate reality-keypair 生成</span>
+<span class="s">                    &quot;private_key&quot;: &quot;${priv_key}&quot;,</span>
+<span class="s">                    &quot;short_id&quot;: [</span>
+<span class="s">                        // 0 到 f，长度为 2 的倍数，长度上限为 16，可留空，或执行 sing-box generate rand 8 --hex 生成</span>
+<span class="s">                        &quot;${short_id}&quot;</span>
+<span class="s">                    ]</span>
+<span class="s">                }</span>
+<span class="s">            },</span>
+<span class="s">            &quot;multiplex&quot;: {</span>
+<span class="s">                &quot;enabled&quot;: true,</span>
+<span class="s">                // V2rayN自定义的sing-box内核中，VLESS-Vision-REALITY 不能启用 padding，会造成连接错误无法上网。单纯内核启动可以启用，暂时属于V2rayN的某个问题。</span>
+<span class="s">                &quot;padding&quot;: false,</span>
+<span class="s">                &quot;brutal&quot;: {</span>
+<span class="s">                    &quot;enabled&quot;: ${brutal_enabled},</span>
+<span class="s">                    &quot;up_mbps&quot;: ${up_mbps},</span>
+<span class="s">                    &quot;down_mbps&quot;: ${down_mbps}</span>
+<span class="s">                }</span>
+<span class="s">            }</span>
+<span class="s">        }</span>
+<span class="s">    ],</span>
+<span class="s">    &quot;outbounds&quot;: [</span>
+<span class="s">        {</span>
+<span class="s">            &quot;type&quot;: &quot;direct&quot;,</span>
+<span class="s">            &quot;tag&quot;: &quot;direct&quot;</span>
+<span class="s">        }</span>
+<span class="s">    ],</span>
+<span class="s">    &quot;route&quot;: {</span>
+<span class="s">        &quot;rules&quot;: [</span>
+<span class="s">            {</span>
+<span class="s">                &quot;inbound&quot;: [&quot;vless-brutal-reality-in&quot;],</span>
+<span class="s">                &quot;outbound&quot;: &quot;direct&quot;</span>
+<span class="s">            }</span>
+<span class="s">        ]</span>
+<span class="s">    }</span>
+<span class="s">}</span>
+<span class="s">&#39;&#39;&#39;</span>
+
+<span class="s">def install_singbox_reality_server() : </span>
+<span class="s">    # --- 基本配置</span>
+<span class="s">    bin_name = &#39;sing-box&#39;</span>
+<span class="s">    config_file_name = &#39;sing-box.json&#39;</span>
+<span class="s">    service_name = &#39;sing-box-reality-server&#39;</span>
+<span class="s">    download_cmd = f&#39;wget {GITHUB_MIRROR}https://github.com/SagerNet/sing-box/releases/download/v1.10.3/sing-box-1.10.3-linux-amd64.tar.gz -O /tmp/singbox.tar.gz&#39;</span>
+<span class="s">    install_bin_cmd = f&#39;cd /tmp &amp;&amp; tar -zxvf ./singbox.tar.gz &amp;&amp; cd sing-box* &amp;&amp; cp sing-box {INSTALL_PATH}/ &amp;&amp; chmod +x {INSTALL_PATH}/sing-box&#39;</span>
+<span class="s">    service_file_content = SERVICE_TEMPLATE.format(service_desc = &#39;sing-box REALITY&#39;, service_cmd = f&#39;{bin_name} run -c {CFG_FILE_DIR}/{config_file_name}&#39;)</span>
+
+<span class="s">    # --- 下载</span>
+<span class="s">    ret = os.system(download_cmd)</span>
+<span class="s">    if ret != 0 : </span>
+<span class="s">        print(&quot;Error downloading sing-box, try switching GitHub mirror\n&quot;)</span>
+<span class="s">        exit(ret)</span>
+<span class="s">    # --- 安装可执行文件</span>
+<span class="s">    ret = os.system(install_bin_cmd)</span>
+<span class="s">    if ret != 0 : </span>
+<span class="s">        print(&quot;Error installing sing-box binary\n&quot;)</span>
+<span class="s">        exit(ret)</span>
+<span class="s">    # --- 测试</span>
+<span class="s">    ret = os.system(f&#39;{bin_name} &gt; /dev/null 2&gt;&amp;1&#39;)</span>
+<span class="s">    if ret != 0 : </span>
+<span class="s">        print(&quot;Warn: Test run bin failed\n&quot;)</span>
+<span class="s">    # --- 安装服务</span>
+<span class="s">    with open(f&#39;{SERVICE_PATH}/{service_name}.service&#39;, &#39;w&#39;) as file:</span>
+<span class="s">        file.write(service_file_content)</span>
+<span class="s">    os.system(f&#39;systemctl daemon-reload &amp;&amp; systemctl status {service_name}&#39;)</span>
+<span class="s">    # --- 生成默认配置</span>
+<span class="s">    with open(f&#39;{CFG_FILE_DIR}/{config_file_name}&#39;, &#39;w&#39;) as file:</span>
+<span class="s">        file.write(config_singbox_reality_server({</span>
+<span class="s">            &quot;server_listen_port&quot; : &quot;8443&quot;,</span>
+<span class="s">            &quot;vless_uuid&quot; : &quot;a60aa17c-7ce6-4ec0-a2c9-8db730f15bf4&quot;,</span>
+<span class="s">            &quot;reality_server_name&quot; : &quot;aws.amazon.com&quot;,</span>
+<span class="s">            &quot;priv_key&quot; : &quot;-FVDzv68IC17fJVlNDlhrrgX44WeBfbhwjWpCQVXGHE&quot;,</span>
+<span class="s">            &quot;short_id&quot; : &quot;a9aa79f2&quot;,</span>
+<span class="s">            &quot;brutal_enabled&quot; : &quot;true&quot;,</span>
+<span class="s">            &quot;up_mbps&quot; : &quot;500&quot;,</span>
+<span class="s">            &quot;down_mbps&quot; : &quot;500&quot;</span>
+<span class="s">            }))</span>
+<span class="s">    # --- 启动服务</span>
+<span class="s">    os.system(f&#39;systemctl enable {service_name} &amp;&amp; systemctl restart {service_name} &amp;&amp; systemctl status {service_name}&#39;)</span>
+
+<span class="s">def config_singbox_reality_server(fmt : dict[str, str]) -&gt; str :</span>
+<span class="s">    if fmt != None: return Template(SINGBOX_TEMPLATE).substitute(fmt)</span>
+<span class="s">    else:</span>
+<span class="s">        return &quot;&quot;    </span>
+
+<span class="s">install_singbox_reality_server()</span>
+<span class="s">EOF</span>
+
+python3<span class="w"> </span>/tmp/sing-box.py
+</code></pre></div>
+
+<h3 id="_3">启用转发</h3>
+<div class="codehilite"><pre><span></span><code><span class="nb">echo</span><span class="w"> </span><span class="m">1</span><span class="w"> </span>&gt;<span class="w"> </span>/proc/sys/net/ipv4/ip_forward
+sysctl<span class="w"> </span>-w<span class="w"> </span>net.ipv4.ip_forward<span class="o">=</span><span class="m">1</span>
+sysctl<span class="w"> </span>-w<span class="w"> </span>net.ipv6.conf.all.forwarding<span class="o">=</span><span class="m">1</span>
+sysctl<span class="w"> </span>-p
+<span class="c1"># 也可手动编辑/etc/sysctl.conf</span>
+<span class="c1"># sed -i &quot;s/#net.ipv4.ip_forward=1/net.ipv4.ip_forward=1/g&quot; /etc/sysctl.conf</span>
+<span class="c1"># sed -i &quot;s/#net.ipv6.conf.all.forwarding=1/net.ipv6.conf.all.forwarding=1/g&quot; /etc/sysctl.conf</span>
+<span class="c1"># sysctl -p</span>
+</code></pre></div>
+
+<h3 id="vpn-server_1">配置VPN Server（手动操作）</h3>
+<p>本地桥设置-创建Tap设备；确保Tap设备名称与VPN_IF_NAME一致（VPN_IF_NAME为填入的名称前面加上<code>tap_</code>）</p>
+<p>密码不能太长，太长连不上</p>
+<h3 id="vpn-server_2">配置VPN Server证书</h3>
+<div class="codehilite"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">DOMAIN_NAME</span><span class="o">=</span><span class="s2">&quot;ct.dreamchaser-luzeyu.cn&quot;</span>
+sudo<span class="w"> </span>apt<span class="w"> </span>update<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>certbot<span class="w"> </span>-y
+certbot<span class="w"> </span>certonly<span class="w"> </span>-d<span class="w"> </span><span class="si">${</span><span class="nv">DOMAIN_NAME</span><span class="si">}</span><span class="w"> </span>--manual<span class="w"> </span>--preferred-challenges<span class="w"> </span>dns
+</code></pre></div>
+
+<h3 id="dhcp">启用DHCP服务</h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># --- 为VPN端口设置静态IP</span>
+ip<span class="w"> </span>addr<span class="w"> </span>add<span class="w"> </span><span class="si">${</span><span class="nv">SERVER_IP_CIDR</span><span class="si">}</span><span class="w"> </span>dev<span class="w"> </span><span class="si">${</span><span class="nv">VPN_IF_NAME</span><span class="si">}</span>
+<span class="c1"># --- 备份旧的配置</span>
+mv<span class="w"> </span>/etc/dhcp/dhcpd.conf<span class="w"> </span>/etc/dhcp/dhcpd.conf.bak
+<span class="c1"># --- 生成新的配置</span>
+cat<span class="w"> </span>&gt;<span class="w"> </span>/tmp/dhcpd.py<span class="w"> </span><span class="s">&lt;&lt; EOF</span>
+<span class="s">import os</span>
+<span class="s">from string import Template</span>
+<span class="s">DHCPD_CFG_TEMPLATE = &#39;&#39;&#39;</span>
+<span class="s">subnet ${SUBNET} netmask ${SUBNET_NETMASK} {</span>
+<span class="s">   range ${DHCP_RANGE};</span>
+<span class="s">   option routers ${GATEWAY_IP};</span>
+<span class="s">   option broadcast-address ${BROADCAST_ADDR};</span>
+<span class="s">   default-lease-time 600;</span>
+<span class="s">   max-lease-time 7200;</span>
+<span class="s">}</span>
+<span class="s">&#39;&#39;&#39;</span>
+<span class="s">with open(&#39;/etc/dhcp/dhcpd.conf&#39;, &#39;w&#39;) as f:</span>
+<span class="s">    f.write(Template(DHCPD_CFG_TEMPLATE).substitute({</span>
+<span class="s">        &quot;SUBNET&quot; : os.getenv(&quot;SUBNET&quot;),</span>
+<span class="s">        &quot;SUBNET_MASK&quot; : os.getenv(&quot;SUBNET_MASK&quot;),</span>
+<span class="s">        &quot;DHCP_RANGE&quot; : os.getenv(&quot;DHCP_RANGE&quot;),</span>
+<span class="s">        &quot;GATEWAY_IP&quot; : os.getenv(&quot;GATEWAY_IP&quot;),</span>
+<span class="s">        &quot;BROADCAST_ADDR&quot; : os.getenv(&quot;BROADCAST_ADDR&quot;),</span>
+<span class="s">    }))</span>
+<span class="s">quit()</span>
+<span class="s">EOF</span>
+python3<span class="w"> </span>/tmp/dhcpd.py
+<span class="c1"># --- 配置端口</span>
+mv<span class="w"> </span>/etc/default/isc-dhcp-server<span class="w"> </span>/etc/default/isc-dhcp-server.bak
+cat<span class="w"> </span>&gt;<span class="w"> </span>/etc/default/isc-dhcp-server<span class="w"> </span><span class="s">&lt;&lt; EOF</span>
+<span class="s">INTERFACESv4=&quot;${VPN_IF_NAME}&quot;</span>
+<span class="s">INTERFACESv6=&quot;${VPN_IF_NAME}&quot;</span>
+<span class="s">EOF</span>
+
+<span class="c1"># --- 启动服务</span>
+systemctl<span class="w"> </span>restart<span class="w"> </span>isc-dhcp-server
+systemctl<span class="w"> </span>status<span class="w"> </span>isc-dhcp-server
+</code></pre></div>
+
+<h3 id="_4">允许转发流量</h3>
+<p>在每个境外VPS上执行：</p>
+<div class="codehilite"><pre><span></span><code>iptables<span class="w"> </span>-A<span class="w"> </span>FORWARD<span class="w"> </span>-i<span class="w"> </span><span class="si">${</span><span class="nv">VPN_IF</span><span class="si">}</span><span class="w"> </span>-j<span class="w"> </span>ACCEPT
+iptables<span class="w"> </span>-A<span class="w"> </span>FORWARD<span class="w"> </span>-o<span class="w"> </span><span class="si">${</span><span class="nv">VPN_IF</span><span class="si">}</span><span class="w"> </span>-j<span class="w"> </span>ACCEPT
+iptables<span class="w"> </span>-t<span class="w"> </span>nat<span class="w"> </span>-A<span class="w"> </span>POSTROUTING<span class="w"> </span>-o<span class="w"> </span><span class="si">${</span><span class="nv">WAN_IF</span><span class="si">}</span><span class="w"> </span>-j<span class="w"> </span>MASQUERADE
+ip6tables<span class="w"> </span>-A<span class="w"> </span>FORWARD<span class="w"> </span>-i<span class="w"> </span><span class="si">${</span><span class="nv">VPN_IF</span><span class="si">}</span><span class="w"> </span>-j<span class="w"> </span>ACCEPT
+ip6tables<span class="w"> </span>-A<span class="w"> </span>FORWARD<span class="w"> </span>-o<span class="w"> </span><span class="si">${</span><span class="nv">VPN_IF</span><span class="si">}</span><span class="w"> </span>-j<span class="w"> </span>ACCEPT
+ip6tables<span class="w"> </span>-t<span class="w"> </span>nat<span class="w"> </span>-A<span class="w"> </span>POSTROUTING<span class="w"> </span>-o<span class="w"> </span><span class="si">${</span><span class="nv">WAN6_IF</span><span class="si">}</span><span class="w"> </span>-j<span class="w"> </span>MASQUERADE
+</code></pre></div>
+
+<h2 id="_5">客户端配置</h2>
+<h3 id="_6">初始化环境变量</h3>
+<div class="codehilite"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">PASSWD</span><span class="o">=</span><span class="s2">&quot;lzy_chAnGED-PwD2c&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">REMOTE_IP</span><span class="o">=</span><span class="s2">&quot;203.0.113.19&quot;</span>
+</code></pre></div>
+
+<h3 id="vpn-client">安装VPN Client</h3>
+<div class="codehilite"><pre><span></span><code>sudo<span class="w"> </span>apt<span class="w"> </span>update<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>softether-vpnclient
+cat<span class="w"> </span>&gt;<span class="w"> </span>/tmp/vpncmd.stdin<span class="w"> </span><span class="s">&lt;&lt; EOF</span>
+<span class="s">2</span>
+<span class="s">localhost</span>
+<span class="s">RemoteEnable</span>
+<span class="s">PasswordSet</span>
+<span class="s">${PASSWD}</span>
+<span class="s">${PASSWD}</span>
+
+<span class="s">EOF</span>
+vpncmd<span class="w"> </span>&lt;<span class="w"> </span>/tmp/vpncmd.stdin
+</code></pre></div>
+
+<h3 id="reality">安装REALITY客户端</h3>
+<div class="codehilite"><pre><span></span><code>sudo<span class="w"> </span>apt<span class="w"> </span>update<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>unzip
+
+mkdir<span class="w"> </span>/usr/local/xray
+wget<span class="w"> </span>https://app.dreamchaser-luzeyu.cn/gh/https://github.com/XTLS/Xray-core/releases/download/v1.8.24/Xray-linux-64.zip<span class="w"> </span>-O<span class="w"> </span>/tmp/xray.zip
+<span class="c1">#wget https://helper.020124.xyz/-----https://github.com/XTLS/Xray-core/releases/download/v1.8.24/Xray-linux-64.zip -O /tmp/xray.zip</span>
+
+unzip<span class="w"> </span>/tmp/xray.zip<span class="w"> </span>-d<span class="w"> </span>/tmp/xray
+cp<span class="w"> </span>/tmp/xray/*<span class="w"> </span>/usr/local/xray/
+<span class="c1">#wget https://app.dreamchaser-luzeyu.cn/caalist/d/StaticFiles/ipv6f46c0039-302a-4bae-d968-a0e545aa0ef7.json -O /usr/local/xray/config.json</span>
+<span class="c1">#wget https://app.dreamchaser-luzeyu.cn/caalist/d/StaticFiles/ipallf46c0039-302a-4bae-d968-a0e545aa0ef7.json -O /usr/local/xray/config.json</span>
+
+cat<span class="w"> </span>&gt;<span class="w"> </span>/usr/lib/systemd/system/xray.service<span class="w"> </span><span class="s">&lt;&lt; EOF</span>
+<span class="s">[Unit]</span>
+<span class="s">Description=Xray</span>
+<span class="s">After=systemd-networkd-wait-online.service</span>
+
+<span class="s">[Service]</span>
+<span class="s">Type=simple</span>
+<span class="s">StartLimitIntervalSec=0</span>
+<span class="s">Restart=always</span>
+<span class="s">RestartSec=1</span>
+<span class="s">ExecStart=/usr/local/xray/xray run -c /usr/local/xray/config.json</span>
+
+<span class="s">[Install]</span>
+<span class="s">WantedBy=multi-user.target</span>
+<span class="s">EOF</span>
+
+cat<span class="w"> </span>&gt;<span class="w"> </span>/usr/local/xray/config.json<span class="w"> </span><span class="s">&lt;&lt; EOF</span>
+<span class="s">{</span>
+<span class="s">    &quot;dns&quot;: {</span>
+<span class="s">        &quot;disableFallback&quot;: true,</span>
+<span class="s">        &quot;servers&quot;: [</span>
+<span class="s">            {</span>
+<span class="s">                &quot;address&quot;: &quot;https://203.0.113.14/dns-query&quot;,</span>
+<span class="s">                &quot;domains&quot;: [],</span>
+<span class="s">                &quot;queryStrategy&quot;: &quot;&quot;</span>
+<span class="s">            },</span>
+<span class="s">            {</span>
+<span class="s">                &quot;address&quot;: &quot;localhost&quot;,</span>
+<span class="s">                &quot;domains&quot;: [],</span>
+<span class="s">                &quot;queryStrategy&quot;: &quot;&quot;</span>
+<span class="s">            }</span>
+<span class="s">        ],</span>
+<span class="s">        &quot;tag&quot;: &quot;dns&quot;</span>
+<span class="s">    },</span>
+<span class="s">    &quot;inbounds&quot;: [</span>
+<span class="s">        {</span>
+<span class="s">            &quot;listen&quot;: &quot;127.0.0.1&quot;,</span>
+<span class="s">            &quot;port&quot;: 2080,</span>
+<span class="s">            &quot;protocol&quot;: &quot;socks&quot;,</span>
+<span class="s">            &quot;settings&quot;: {</span>
+<span class="s">                &quot;udp&quot;: true</span>
+<span class="s">            },</span>
+<span class="s">            &quot;sniffing&quot;: {</span>
+<span class="s">                &quot;destOverride&quot;: [</span>
+<span class="s">                    &quot;http&quot;,</span>
+<span class="s">                    &quot;tls&quot;,</span>
+<span class="s">                    &quot;quic&quot;</span>
+<span class="s">                ],</span>
+<span class="s">                &quot;enabled&quot;: true,</span>
+<span class="s">                &quot;metadataOnly&quot;: false,</span>
+<span class="s">                &quot;routeOnly&quot;: true</span>
+<span class="s">            },</span>
+<span class="s">            &quot;tag&quot;: &quot;socks-in&quot;</span>
+<span class="s">        },</span>
+<span class="s">        {</span>
+<span class="s">            &quot;listen&quot;: &quot;127.0.0.1&quot;,</span>
+<span class="s">            &quot;port&quot;: 2081,</span>
+<span class="s">            &quot;protocol&quot;: &quot;http&quot;,</span>
+<span class="s">            &quot;sniffing&quot;: {</span>
+<span class="s">                &quot;destOverride&quot;: [</span>
+<span class="s">                    &quot;http&quot;,</span>
+<span class="s">                    &quot;tls&quot;,</span>
+<span class="s">                    &quot;quic&quot;</span>
+<span class="s">                ],</span>
+<span class="s">                &quot;enabled&quot;: true,</span>
+<span class="s">                &quot;metadataOnly&quot;: false,</span>
+<span class="s">                &quot;routeOnly&quot;: true</span>
+<span class="s">            },</span>
+<span class="s">            &quot;tag&quot;: &quot;http-in&quot;</span>
+<span class="s">        }</span>
+<span class="s">    ],</span>
+<span class="s">    &quot;log&quot;: {</span>
+<span class="s">        &quot;loglevel&quot;: &quot;warning&quot;</span>
+<span class="s">    },</span>
+<span class="s">    &quot;outbounds&quot;: [</span>
+<span class="s">        {</span>
+<span class="s">            &quot;domainStrategy&quot;: &quot;AsIs&quot;,</span>
+<span class="s">            &quot;flow&quot;: null,</span>
+<span class="s">            &quot;protocol&quot;: &quot;vless&quot;,</span>
+<span class="s">            &quot;settings&quot;: {</span>
+<span class="s">                &quot;vnext&quot;: [</span>
+<span class="s">                    {</span>
+<span class="s">                        &quot;address&quot;: &quot;203.0.113.19&quot;,</span>
+<span class="s">                        &quot;port&quot;: 8443,</span>
+<span class="s">                        &quot;users&quot;: [</span>
+<span class="s">                            {</span>
+<span class="s">                                &quot;encryption&quot;: &quot;none&quot;,</span>
+<span class="s">                                &quot;flow&quot;: &quot;&quot;,</span>
+<span class="s">                                &quot;id&quot;: &quot;a60aa17c-7ce6-4ec0-a2c9-8db730f15bf4&quot;</span>
+<span class="s">                            }</span>
+<span class="s">                        ]</span>
+<span class="s">                    }</span>
+<span class="s">                ]</span>
+<span class="s">            },</span>
+<span class="s">            &quot;streamSettings&quot;: {</span>
+<span class="s">                &quot;network&quot;: &quot;tcp&quot;,</span>
+<span class="s">                &quot;realitySettings&quot;: {</span>
+<span class="s">                    &quot;fingerprint&quot;: &quot;random&quot;,</span>
+<span class="s">                    &quot;publicKey&quot;: &quot;PGG2EYOvsFt2lAQTD7lqHeRxz2KxvllEDKcUrtizPBU&quot;,</span>
+<span class="s">                    &quot;serverName&quot;: &quot;aws.amazon.com&quot;,</span>
+<span class="s">                    &quot;shortId&quot;: &quot;a9aa79f2&quot;,</span>
+<span class="s">                    &quot;spiderX&quot;: &quot;&quot;</span>
+<span class="s">                },</span>
+<span class="s">                &quot;security&quot;: &quot;reality&quot;</span>
+<span class="s">            },</span>
+<span class="s">            &quot;tag&quot;: &quot;proxy&quot;</span>
+<span class="s">        },</span>
+<span class="s">        {</span>
+<span class="s">            &quot;domainStrategy&quot;: &quot;&quot;,</span>
+<span class="s">            &quot;protocol&quot;: &quot;freedom&quot;,</span>
+<span class="s">            &quot;tag&quot;: &quot;direct&quot;</span>
+<span class="s">        },</span>
+<span class="s">        {</span>
+<span class="s">            &quot;domainStrategy&quot;: &quot;&quot;,</span>
+<span class="s">            &quot;protocol&quot;: &quot;freedom&quot;,</span>
+<span class="s">            &quot;tag&quot;: &quot;bypass&quot;</span>
+<span class="s">        },</span>
+<span class="s">        {</span>
+<span class="s">            &quot;protocol&quot;: &quot;blackhole&quot;,</span>
+<span class="s">            &quot;tag&quot;: &quot;block&quot;</span>
+<span class="s">        },</span>
+<span class="s">        {</span>
+<span class="s">            &quot;protocol&quot;: &quot;dns&quot;,</span>
+<span class="s">            &quot;proxySettings&quot;: {</span>
+<span class="s">                &quot;tag&quot;: &quot;proxy&quot;,</span>
+<span class="s">                &quot;transportLayer&quot;: true</span>
+<span class="s">            },</span>
+<span class="s">            &quot;settings&quot;: {</span>
+<span class="s">                &quot;address&quot;: &quot;203.0.113.14&quot;,</span>
+<span class="s">                &quot;network&quot;: &quot;tcp&quot;,</span>
+<span class="s">                &quot;port&quot;: 53,</span>
+<span class="s">                &quot;userLevel&quot;: 1</span>
+<span class="s">            },</span>
+<span class="s">            &quot;tag&quot;: &quot;dns-out&quot;</span>
+<span class="s">        }</span>
+<span class="s">    ],</span>
+<span class="s">    &quot;policy&quot;: {</span>
+<span class="s">        &quot;levels&quot;: {</span>
+<span class="s">            &quot;1&quot;: {</span>
+<span class="s">                &quot;connIdle&quot;: 30</span>
+<span class="s">            }</span>
+<span class="s">        },</span>
+<span class="s">        &quot;system&quot;: {</span>
+<span class="s">            &quot;statsOutboundDownlink&quot;: true,</span>
+<span class="s">            &quot;statsOutboundUplink&quot;: true</span>
+<span class="s">        }</span>
+<span class="s">    },</span>
+<span class="s">    &quot;routing&quot;: {</span>
+<span class="s">        &quot;domainStrategy&quot;: &quot;AsIs&quot;,</span>
+<span class="s">        &quot;rules&quot;: [</span>
+<span class="s">            {</span>
+<span class="s">                &quot;inboundTag&quot;: [</span>
+<span class="s">                    &quot;socks-in&quot;,</span>
+<span class="s">                    &quot;http-in&quot;</span>
+<span class="s">                ],</span>
+<span class="s">                &quot;outboundTag&quot;: &quot;dns-out&quot;,</span>
+<span class="s">                &quot;port&quot;: &quot;53&quot;,</span>
+<span class="s">                &quot;type&quot;: &quot;field&quot;</span>
+<span class="s">            },</span>
+<span class="s">            {</span>
+<span class="s">                &quot;outboundTag&quot;: &quot;proxy&quot;,</span>
+<span class="s">                &quot;port&quot;: &quot;0-65535&quot;,</span>
+<span class="s">                &quot;type&quot;: &quot;field&quot;</span>
+<span class="s">            }</span>
+<span class="s">        ]</span>
+<span class="s">    },</span>
+<span class="s">    &quot;stats&quot;: {}</span>
+<span class="s">}</span>
+<span class="s">EOF</span>
+
+systemctl<span class="w"> </span><span class="nb">enable</span><span class="w"> </span>xray
+systemctl<span class="w"> </span>restart<span class="w"> </span>xray
+systemctl<span class="w"> </span>status<span class="w"> </span>xray
+curl<span class="w"> </span>ip.sb<span class="w"> </span>-4<span class="w"> </span>--proxy<span class="w"> </span>socks5://127.0.0.1:2080
+</code></pre></div>
+
+<h3 id="_7">配置端口转发</h3>
+<p>此步骤实测不需要，只需连接时通过socks5代理即可</p>
+<div class="codehilite"><pre><span></span><code>cat<span class="w"> </span>&gt;<span class="w"> </span>/tmp/config_xray.py<span class="w"> </span><span class="s">&lt;&lt; EOF</span>
+<span class="s">import json</span>
+
+<span class="s">json_obj = {}</span>
+<span class="s">with open(&quot;/usr/local/xray/config.json&quot;, &#39;r&#39;) as file:</span>
+<span class="s">    json_obj = json.load(file)</span>
+
+<span class="s">remote_server_ip = input(&quot;远程服务器IP: &quot;)</span>
+<span class="s">while True:</span>
+<span class="s">    port_fwd = input(&quot;是否继续添加使用端口转发？(y/n)&quot;)</span>
+<span class="s">    if port_fwd != &#39;y&#39;: break</span>
+<span class="s">    protocol = input(&quot;转发协议: (tcp/udp)&quot;)</span>
+<span class="s">    if protocol != &quot;tcp&quot; and protocol != &quot;udp&quot;:</span>
+<span class="s">        print(&quot;协议输入错误&quot;)</span>
+<span class="s">        continue</span>
+<span class="s">    local_listen_ip = input(&quot;本地监听IP: &quot;)</span>
+<span class="s">    local_listen_port = input(&quot;本地监听端口: &quot;)</span>
+<span class="s">    remote_ip = input(&quot;远程IP: &quot;)</span>
+<span class="s">    remote_port = input(&quot;远程端口: &quot;)</span>
+<span class="s">    port_fwd_obj = {</span>
+<span class="s">        &quot;address&quot;: local_listen_ip,</span>
+<span class="s">        &quot;port&quot;: int(local_listen_port),</span>
+<span class="s">        &quot;protocol&quot;: &quot;dokodemo-door&quot;,</span>
+<span class="s">        &quot;settings&quot;: {</span>
+<span class="s">            &quot;address&quot;: remote_ip,</span>
+<span class="s">            &quot;port&quot;: int(remote_port),</span>
+<span class="s">            &quot;network&quot;: &quot;tcp&quot;</span>
+<span class="s">        }</span>
+<span class="s">    }</span>
+<span class="s">    json_obj[&#39;inbounds&#39;].append(port_fwd_obj)</span>
+<span class="s">    json_obj[&#39;outbounds&#39;][0][&#39;settings&#39;][&#39;vnext&#39;][0][&#39;address&#39;] = remote_server_ip</span>
+
+<span class="s">with open(&quot;/usr/local/xray/config.json&quot;, &#39;w&#39;) as file:</span>
+<span class="s">    json.dump(json_obj, file, indent=4)</span>
+<span class="s">EOF</span>
+clear
+python3<span class="w"> </span>/tmp/config_xray.py
+systemctl<span class="w"> </span>restart<span class="w"> </span>xray
+systemctl<span class="w"> </span>status<span class="w"> </span>xray
+curl<span class="w"> </span>ip.sb<span class="w"> </span>-4<span class="w"> </span>--proxy<span class="w"> </span>socks5://127.0.0.1:2080
+</code></pre></div>
+
+<h3 id="vpn">连接VPN（手动操作）</h3>
+<p>不改变路由表；禁用UDP加速；修改连接数</p>
+<h3 id="vpndhcp">配置VPN端口为DHCP</h3>
+<p>配置netplan</p>
+<h3 id="ip">路由境外IP</h3>
+<h3 id="ip_1">源IP策略路由</h3>
+<p>这样配置好后，只有前面添加过静态路由的源IP才能访问到服务器，为了让所有来源IP都能访问到服务器，应配置策略路由，让源IP为本机公网IP的数据包不经过VPN。</p>
+<div class="codehilite"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">CN_TABLE</span><span class="o">=</span><span class="s2">&quot;100&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">PUBLIC_IPV4</span><span class="o">=</span><span class="s2">&quot;203.0.113.20/32&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">PUBLIC_IPV6</span><span class="o">=</span><span class="s2">&quot;240e:f7:a020:204::4eb6/112&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">IPV4_GATEWAY</span><span class="o">=</span><span class="s2">&quot;203.0.113.21&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">IPV6_GATEWAY</span><span class="o">=</span><span class="s2">&quot;240e:f7:a020:204::1&quot;</span>
+
+ip<span class="w"> </span>route<span class="w"> </span>add<span class="w"> </span>default<span class="w"> </span>via<span class="w"> </span><span class="si">${</span><span class="nv">IPV4_GATEWAY</span><span class="si">}</span><span class="w"> </span>dev<span class="w"> </span>eth0<span class="w"> </span>table<span class="w"> </span><span class="si">${</span><span class="nv">CN_TABLE</span><span class="si">}</span>
+ip<span class="w"> </span>-6<span class="w"> </span>route<span class="w"> </span>add<span class="w"> </span>default<span class="w"> </span>via<span class="w"> </span><span class="si">${</span><span class="nv">IPV6_GATEWAY</span><span class="si">}</span><span class="w"> </span>dev<span class="w"> </span>eth0<span class="w"> </span>table<span class="w"> </span><span class="si">${</span><span class="nv">CN_TABLE</span><span class="si">}</span>
+ip<span class="w"> </span>rule<span class="w"> </span>add<span class="w"> </span>from<span class="w"> </span><span class="si">${</span><span class="nv">PUBLIC_IPV4</span><span class="si">}</span><span class="w"> </span>table<span class="w"> </span><span class="si">${</span><span class="nv">CN_TABLE</span><span class="si">}</span>
+ip<span class="w"> </span>-6<span class="w"> </span>rule<span class="w"> </span>add<span class="w"> </span>from<span class="w"> </span><span class="si">${</span><span class="nv">PUBLIC_IPV6</span><span class="si">}</span><span class="w"> </span>table<span class="w"> </span><span class="si">${</span><span class="nv">CN_TABLE</span><span class="si">}</span>
+</code></pre></div>

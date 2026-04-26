@@ -1,0 +1,15 @@
+<h1 id="dockeripv6">给docker容器分配ipv6地址</h1>
+<p>还是用内网ipv6吧</p>
+<p><code>/etc/docker/daemon.json</code></p>
+<div class="codehilite"><pre><span></span><code>{
+  &quot;ipv6&quot;: true,
+  &quot;fixed-cidr-v6&quot;: &quot;fd00:cafe::/64&quot;,
+  &quot;ip6tables&quot;: true
+}
+</code></pre></div>
+
+<div class="codehilite"><pre><span></span><code>sudo<span class="w"> </span>sysctl<span class="w"> </span>-w<span class="w"> </span>net.ipv6.conf.all.forwarding<span class="o">=</span><span class="m">1</span>
+sudo<span class="w"> </span>ip6tables<span class="w"> </span>-t<span class="w"> </span>nat<span class="w"> </span>-A<span class="w"> </span>POSTROUTING<span class="w"> </span>-s<span class="w"> </span>fd00:cafe::/64<span class="w"> </span>-o<span class="w"> </span>eth0<span class="w"> </span>-j<span class="w"> </span>MASQUERADE
+</code></pre></div>
+
+<p>之后正常创建容器即可</p>

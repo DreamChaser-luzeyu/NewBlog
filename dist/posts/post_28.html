@@ -1,0 +1,57 @@
+<h1 id="dockernetmaker">docker部署netmaker</h1>
+<div class="codehilite"><pre><span></span><code>mkdir<span class="w"> </span>netmaker
+<span class="nb">cd</span><span class="w"> </span>netmaker
+wget<span class="w"> </span>https://github.com/gravitl/netmaker/raw/master/compose/docker-compose.yml
+sed<span class="w"> </span>-i<span class="w"> </span><span class="s2">&quot;s/80:80/10080:80/g&quot;</span><span class="w"> </span>./docker-compose.yml
+sed<span class="w"> </span>-i<span class="w"> </span><span class="s2">&quot;s/443:443/10443:443/g&quot;</span><span class="w"> </span>./docker-compose.yml
+
+cat<span class="w"> </span><span class="s">&lt;&lt; EOF &gt; ./netmaker.env</span>
+<span class="s">SERVER_IMAGE_TAG=latest</span>
+<span class="s">UI_IMAGE_TAG=latest</span>
+<span class="s">SERVER_HOST=203.0.113.27</span>
+<span class="s">NM_DOMAIN=nm.dreamchaser-luzeyu.cn</span>
+<span class="s">EOF</span>
+
+cat<span class="w"> </span><span class="s">&lt;&lt; EOF &gt; ./Caddyfile</span>
+<span class="s">{</span>
+<span class="s">    email yydluzeyu@gmail.com</span>
+<span class="s">}</span>
+<span class="s"># Dashboard</span>
+<span class="s">https://dashboard.nm.dreamchaser-luzeyu.cn {</span>
+<span class="s">    # Apply basic security headers</span>
+<span class="s">    header {</span>
+<span class="s">            # Enable cross origin access to *.NETMAKER_BASE_DOMAIN</span>
+<span class="s">            Access-Control-Allow-Origin *.nm.dreamchaser-luzeyu.cn</span>
+<span class="s">            # Enable HTTP Strict Transport Security (HSTS)</span>
+<span class="s">            Strict-Transport-Security &quot;max-age=31536000;&quot;</span>
+<span class="s">            # Enable cross-site filter (XSS) and tell browser to block detected attacks</span>
+<span class="s">            X-XSS-Protection &quot;1; mode=block&quot;</span>
+<span class="s">            # Disallow the site to be rendered within a frame on a foreign domain (clickjacking protection)</span>
+<span class="s">            X-Frame-Options &quot;SAMEORIGIN&quot;</span>
+<span class="s">            # Prevent search engines from indexing</span>
+<span class="s">            X-Robots-Tag &quot;none&quot;</span>
+<span class="s">            # Remove the server name</span>
+<span class="s">            -Server</span>
+<span class="s">    }</span>
+
+<span class="s">    reverse_proxy http://netmaker-ui</span>
+<span class="s">}</span>
+<span class="s"># API</span>
+<span class="s">https://api.nm.dreamchaser-luzeyu.cn {</span>
+<span class="s">        reverse_proxy http://netmaker:8081</span>
+<span class="s">}</span>
+<span class="s"># MQ</span>
+<span class="s">wss://broker.nm.dreamchaser-luzeyu.cn {</span>
+<span class="s">        reverse_proxy ws://mq:8883</span>
+<span class="s">}</span>
+<span class="s">EOF</span>
+
+<span class="c1"># 将*.nm.dreamchaser-luzeyu.cn代理到10080和10443</span>
+
+docker-compose<span class="w"> </span>-f<span class="w"> </span>./docker-compose.yml
+</code></pre></div>
+
+<div class="codehilite"><pre><span></span><code><span class="c1">#</span>
+sudo<span class="w"> </span>wget<span class="w"> </span>-qO<span class="w"> </span>/root/nm-quick.sh<span class="w"> </span>https://raw.githubusercontent.com/gravitl/netmaker/master/scripts/nm-quick.sh<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>sudo<span class="w"> </span>chmod<span class="w"> </span>+x<span class="w"> </span>/root/nm-quick.sh<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>sudo<span class="w"> </span>/root/nm-quick.sh
+/root/nm-quick.sh<span class="w"> </span>-d
+</code></pre></div>

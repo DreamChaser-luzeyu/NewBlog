@@ -1,0 +1,32 @@
+<h1 id="radvd">RADVD配置</h1>
+<div class="codehilite"><pre><span></span><code>apt<span class="w"> </span>install<span class="w"> </span>radvd
+
+<span class="nb">export</span><span class="w"> </span><span class="nv">RA_IF</span><span class="o">=</span><span class="s2">&quot;enp1s0&quot;</span>
+<span class="c1"># 前缀必须是64</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">RA_IPV6_CIDR</span><span class="o">=</span><span class="s2">&quot;2a12:ab80:3:2100::/64&quot;</span>
+cat<span class="w"> </span>&gt;<span class="w"> </span>/etc/radvd.conf<span class="w"> </span><span class="s">&lt;&lt; EOF</span>
+<span class="s">interface ${RA_IF} {</span>
+<span class="s">    AdvSendAdvert on;</span>
+<span class="s">    AdvManagedFlag on;</span>
+<span class="s">    AdvOtherConfigFlag on;</span>
+<span class="s">    prefix ${RA_IPV6_CIDR} {</span>
+<span class="s">        AdvOnLink on;</span>
+<span class="s">        AdvAutonomous on;</span>
+<span class="s">        AdvRouterAddr off;  </span>
+<span class="s">    };</span>
+<span class="s">    # 对于旁路由还需配置route，2000::/3是全球单拨地址范围</span>
+<span class="s">    # 如果希望IPv6不流经旁路由，可以略去这部分</span>
+<span class="s">    route 2000::/3 {</span>
+<span class="s">        AdvRouteLifetime 1800;</span>
+<span class="s">        AdvRoutePreference high;  # 宣称为高优先级，旁路由掉线可自动切换为主路由</span>
+<span class="s">    };</span>
+<span class="s">};</span>
+<span class="s">EOF</span>
+<span class="nb">unset</span><span class="w"> </span>RA_IF
+<span class="nb">unset</span><span class="w"> </span>RA_IPV6_CIDR
+cat<span class="w"> </span>/etc/radvd.conf
+<span class="c1"># 启动服务</span>
+systemctl<span class="w"> </span><span class="nb">enable</span><span class="w"> </span>radvd
+systemctl<span class="w"> </span>restart<span class="w"> </span>radvd
+systemctl<span class="w"> </span>status<span class="w"> </span>radvd
+</code></pre></div>

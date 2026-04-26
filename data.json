@@ -1,50 +1,477 @@
 {
     "config": {
         "site": {
-            "title": "我的个人博客",
-            "author": "Your Name",
-            "copyright": "© 2024 Your Name. All Rights Reserved.",
-            "beian": "某ICP备12345678号-1",
+            "title": "DreamBlog",
+            "author": "BinaryDumplings",
+            "copyright": "© 2024 BinaryDumplings. All Rights Reserved.",
+            "beian": "津ICP备2024018227号-1",
             "beian_url": "https://beian.miit.gov.cn/"
         },
         "social": {
-            "github": "https://github.com/your-handle",
-            "email": "mailto:your-email@example.com",
-            "twitter": "https://twitter.com/your-handle"
+            "github": "https://github.com/DreamChaser-luzeyu",
+            "email": "mailto:yydluzeyu#gmail.com (replace '#' with '@')"
         }
     },
     "categories": [
         {
             "id": 1000,
-            "name": "技术",
+            "name": "计算机基础",
             "articles": [
-                1
+                1,
+                2
             ]
         },
         {
             "id": 1001,
+            "name": "体系结构与底层",
+            "articles": [
+                3,
+                4,
+                5,
+                6
+            ]
+        },
+        {
+            "id": 1002,
             "name": "生活",
             "articles": [
-                2
+                7
+            ]
+        },
+        {
+            "id": 1003,
+            "name": "技术",
+            "articles": [
+                8
+            ]
+        },
+        {
+            "id": 1004,
+            "name": "论文阅读",
+            "articles": [
+                9,
+                10,
+                11,
+                12
+            ]
+        },
+        {
+            "id": 1005,
+            "name": "工具与规范",
+            "articles": [
+                13,
+                14
+            ]
+        },
+        {
+            "id": 1006,
+            "name": "人工智能",
+            "articles": [
+                15
+            ]
+        },
+        {
+            "id": 1007,
+            "name": "电子工程",
+            "articles": [
+                16
+            ]
+        },
+        {
+            "id": 1008,
+            "name": "Linux与运维",
+            "articles": [
+                17,
+                18,
+                19,
+                20,
+                21,
+                22,
+                23,
+                24,
+                25,
+                26,
+                27,
+                28,
+                29,
+                30,
+                31,
+                32,
+                33,
+                34
+            ]
+        },
+        {
+            "id": 1009,
+            "name": "编程语言",
+            "articles": [
+                35,
+                36,
+                37,
+                38,
+                39,
+                40
             ]
         }
     ],
     "articles": [
         {
             "id": 1,
-            "title": "Vue 3 桌面系统开发实战",
-            "date": "2024-04-26",
+            "title": "数据结构复习",
+            "date": "2026-04-26",
             "category": 1000,
             "content_url": "dist/posts/post_1.html",
-            "pinned": true,
+            "pinned": false,
             "type": "article"
         },
         {
             "id": 2,
+            "title": "状态机",
+            "date": "2026-04-26",
+            "category": 1000,
+            "content_url": "dist/posts/post_2.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 3,
+            "title": "ARM上运行llama.cpp",
+            "date": "2026-04-26",
+            "category": 1001,
+            "content_url": "dist/posts/post_3.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 4,
+            "title": "QEMU SystemC协同仿真",
+            "date": "2026-04-26",
+            "category": 1001,
+            "content_url": "dist/posts/post_4.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 5,
+            "title": "RISC-V体系架构",
+            "date": "2026-04-26",
+            "category": 1001,
+            "content_url": "dist/posts/post_5.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 6,
+            "title": "ELF_PE文件以及动态链接原理",
+            "date": "2026-04-26",
+            "category": 1001,
+            "content_url": "dist/posts/post_6.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 9,
+            "title": "论文阅读：基于国产平台的 LLVM JIT 编译优化技术研究",
+            "date": "2026-04-26",
+            "category": 1004,
+            "content_url": "dist/posts/post_9.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 10,
+            "title": "论文阅读：混合仿真平台中周期精确硬件模型 FPGA 加速实现",
+            "date": "2026-04-26",
+            "category": 1004,
+            "content_url": "dist/posts/post_10.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 11,
+            "title": "论文阅读：支持异步灵活并行远端内存访问的架构与 RISC-V ISA 扩展",
+            "date": "2026-04-26",
+            "category": 1004,
+            "content_url": "dist/posts/post_11.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 12,
+            "title": "论文阅读：多上下文多线程超标量处理器体系结构",
+            "date": "2026-04-26",
+            "category": 1004,
+            "content_url": "dist/posts/post_12.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 13,
+            "title": "Markdown规范",
+            "date": "2026-04-26",
+            "category": 1005,
+            "content_url": "dist/posts/post_13.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 14,
+            "title": "GDB常用命令",
+            "date": "2026-04-26",
+            "category": 1005,
+            "content_url": "dist/posts/post_14.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 15,
+            "title": "AI相关笔记",
+            "date": "2026-04-26",
+            "category": 1006,
+            "content_url": "dist/posts/post_15.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 16,
+            "title": "PN结",
+            "date": "2026-04-26",
+            "category": 1007,
+            "content_url": "dist/posts/post_16.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 17,
+            "title": "OSPF配置",
+            "date": "2026-04-26",
+            "category": 1008,
+            "content_url": "dist/posts/post_17.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 18,
+            "title": "UDP加速",
+            "date": "2026-04-26",
+            "category": 1008,
+            "content_url": "dist/posts/post_18.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 19,
+            "title": "Usage:",
+            "date": "2026-04-26",
+            "category": 1008,
+            "content_url": "dist/posts/post_19.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 20,
+            "title": "RADVD配置",
+            "date": "2026-04-26",
+            "category": 1008,
+            "content_url": "dist/posts/post_20.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 21,
+            "title": "Docker部署derp",
+            "date": "2026-04-26",
+            "category": 1008,
+            "content_url": "dist/posts/post_21.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 22,
+            "title": "常用命令代理",
+            "date": "2026-04-26",
+            "category": 1008,
+            "content_url": "dist/posts/post_22.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 23,
+            "title": "注：ip rule add table <id>命令会同时创建一个路由表",
+            "date": "2026-04-26",
+            "category": 1008,
+            "content_url": "dist/posts/post_23.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 24,
+            "title": "MPTCP 内核配置",
+            "date": "2026-04-26",
+            "category": 1008,
+            "content_url": "dist/posts/post_24.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 25,
+            "title": "给docker容器分配ipv6地址",
+            "date": "2026-04-26",
+            "category": 1008,
+            "content_url": "dist/posts/post_25.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 26,
+            "title": "Headscale部署",
+            "date": "2026-04-26",
+            "category": 1008,
+            "content_url": "dist/posts/post_26.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 27,
+            "title": "VNC运行Chromium",
+            "date": "2026-04-26",
+            "category": 1008,
+            "content_url": "dist/posts/post_27.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 28,
+            "title": "docker部署netmaker",
+            "date": "2026-04-26",
+            "category": 1008,
+            "content_url": "dist/posts/post_28.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 29,
+            "title": "SoftEther VPN Server + DHCPD",
+            "date": "2026-04-26",
+            "category": 1008,
+            "content_url": "dist/posts/post_29.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 30,
+            "title": "OpenWRT常用配置",
+            "date": "2026-04-26",
+            "category": 1008,
+            "content_url": "dist/posts/post_30.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 31,
+            "title": "Linux binfmt_misc特性",
+            "date": "2026-04-26",
+            "category": 1008,
+            "content_url": "dist/posts/post_31.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 32,
+            "title": "SoftEther VPN 配置",
+            "date": "2026-04-26",
+            "category": 1008,
+            "content_url": "dist/posts/post_32.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 33,
+            "title": "Nginx反向代理笔记",
+            "date": "2026-04-26",
+            "category": 1008,
+            "content_url": "dist/posts/post_33.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 34,
+            "title": "Linux chroot维护",
+            "date": "2026-04-26",
+            "category": 1008,
+            "content_url": "dist/posts/post_34.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 35,
+            "title": "C++现代内存管理",
+            "date": "2026-04-26",
+            "category": 1009,
+            "content_url": "dist/posts/post_35.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 36,
+            "title": "Rust学习",
+            "date": "2026-04-26",
+            "category": 1009,
+            "content_url": "dist/posts/post_36.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 37,
+            "title": "通用规范",
+            "date": "2026-04-26",
+            "category": 1009,
+            "content_url": "dist/posts/post_37.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 38,
+            "title": "C++ 模板和元编程",
+            "date": "2026-04-26",
+            "category": 1009,
+            "content_url": "dist/posts/post_38.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 39,
+            "title": "C++现代类型系统",
+            "date": "2026-04-26",
+            "category": 1009,
+            "content_url": "dist/posts/post_39.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 40,
+            "title": "Python高效开发",
+            "date": "2026-04-26",
+            "category": 1009,
+            "content_url": "dist/posts/post_40.html",
+            "pinned": false,
+            "type": "article"
+        },
+        {
+            "id": 8,
+            "title": "Vue 3 桌面系统开发实战",
+            "date": "2024-04-26",
+            "category": 1003,
+            "content_url": "dist/posts/post_8.html",
+            "pinned": true,
+            "type": "article"
+        },
+        {
+            "id": 7,
             "title": "我的第一篇生活随笔",
             "date": "2024-04-25",
-            "category": 1001,
-            "content_url": "dist/posts/post_2.html",
+            "category": 1002,
+            "content_url": "dist/posts/post_7.html",
             "pinned": false,
             "type": "article"
         }

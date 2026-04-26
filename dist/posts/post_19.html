@@ -1,0 +1,19 @@
+<div class="codehilite"><pre><span></span><code><span class="c1"># Usage: </span>
+<span class="c1"># 安装符号链接 update-alternatives --install &lt;link&gt; &lt;name&gt; &lt;path&gt; &lt;priority&gt;</span>
+<span class="c1"># 注：priority数值越大，优先级越高？需要确认</span>
+<span class="c1"># 删除符号链接 update-alternatives --remove &lt;name&gt; &lt;path&gt;</span>
+
+<span class="c1"># Example: 切换aarch64-linux-gnu-gcc版本</span>
+<span class="c1"># 假设$PATH里存在aarch64-linux-gnu-gcc-11和aarch64-linux-gnu-gcc-12</span>
+update-alternatives<span class="w"> </span>--install<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="k">$(</span>which<span class="w"> </span>aarch64-linux-gnu-gcc<span class="k">)</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>aarch64-linux-gnu-gcc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="k">$(</span>which<span class="w"> </span>aarch64-linux-gnu-gcc-11<span class="k">)</span><span class="w"> </span><span class="m">50</span>
+update-alternatives<span class="w"> </span>--install<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="k">$(</span>which<span class="w"> </span>aarch64-linux-gnu-gcc<span class="k">)</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>aarch64-linux-gnu-gcc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="k">$(</span>which<span class="w"> </span>aarch64-linux-gnu-gcc-12<span class="k">)</span><span class="w"> </span><span class="m">40</span>
+update-alternatives<span class="w"> </span>--config<span class="w"> </span>aarch64-linux-gnu-gcc
+<span class="c1"># 选取一个即可</span>
+aarch64-linux-gnu-gcc<span class="w"> </span>--version
+</code></pre></div>

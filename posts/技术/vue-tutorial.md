@@ -1,7 +1,12 @@
 ---
-title: Vue 3 桌面系统开发实战
 date: 2024-04-26
 pinned: true
+tags:
+- Vue 3
+- 前端
+- 桌面系统
+- 博客
+title: Vue 3 桌面系统开发实战
 ---
 
 # Vue 3 桌面系统开发实战

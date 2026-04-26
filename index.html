@@ -73,8 +73,18 @@
                 </div>
             </div>
             <div class="webde-window-content window-content-enable">
-                <div class="folder-content">
-                    <div v-for="article in getArticlesByCategory(folder.id)" :key="article.id" class="desktop-icon small" @dblclick="openArticle(article)">
+                <div class="folder-toolbar">
+                    <button class="folder-view-toggle" :class="{ active: folder.viewMode === 'grid' }" @click.stop="setFolderViewMode(folder.id, 'grid')">
+                        <span class="material-icons">grid_view</span>
+                        <span>图标</span>
+                    </button>
+                    <button class="folder-view-toggle" :class="{ active: folder.viewMode === 'list' }" @click.stop="setFolderViewMode(folder.id, 'list')">
+                        <span class="material-icons">view_list</span>
+                        <span>列表</span>
+                    </button>
+                </div>
+                <div class="folder-content" :class="`view-${folder.viewMode || 'grid'}`">
+                    <div v-for="article in getArticlesByCategory(folder.id)" :key="article.id" class="desktop-icon small folder-item" @dblclick="openArticle(article)">
                         <div class="icon-img article-icon"></div>
                         <div class="icon-label">{{ article.title }}</div>
                     </div>

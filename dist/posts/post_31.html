@@ -1,0 +1,30 @@
+<h1 id="linux-binfmt_misc">Linux binfmt_misc特性</h1>
+<h2 id="binfmt_misc">启用binfmt_misc</h2>
+<p>如果之前装过其他体系架构的qemu-user软件包或是wine，此特性应该已经启用。</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># 验证binfmt_misc是否启用</span>
+lsmod<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>binfmt_misc
+<span class="c1"># 如有输出，表示已启用</span>
+<span class="c1"># 手动启用步骤如下</span>
+sudo<span class="w"> </span>modprobe<span class="w"> </span>binfmt_misc
+<span class="c1"># 或者</span>
+<span class="c1"># sudo mount binfmt_misc -t binfmt_misc /proc/sys/fs/binfmt_misc</span>
+</code></pre></div>
+
+<p>查看已有的binfmt_misc配置，并为QEMU注册binfmt_misc</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># 查看已有binfmt_misc配置</span>
+ls<span class="w"> </span>/proc/sys/fs/binfmt_misc
+<span class="c1"># 检查有没有update-binfmts命令</span>
+which<span class="w"> </span>update-binfmts
+<span class="c1"># 如没有，安装</span>
+sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>binfmt-support
+<span class="c1"># 启用qemu-aarch64支持</span>
+sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>qemu-user-binfmt<span class="w"> </span>qemu-user<span class="w"> </span>-y
+sudo<span class="w"> </span>update-binfmts<span class="w"> </span>--enable<span class="w"> </span>qemu-aarch64
+ls<span class="w"> </span>/proc/sys/fs/binfmt_misc
+</code></pre></div>
+
+<h2 id="elf">执行其他架构的elf</h2>
+<p>对于多数elf，需要额外配置该架构库文件的路径。可以使用<code>LD_LIBRARY_PATH</code>环境变量。</p>
+<p>对于搜索路径固定的动态链接库，QEMU还提供了<code>QEMU_LD_PREFIX</code>环境变量用于配置动态链接库搜索的根目录。如：</p>
+<div class="codehilite"><pre><span></span><code><span class="nv">QEMU_LD_PREFIX</span><span class="o">=</span>/usr/aarch64-linux-gnu<span class="w"> </span>./llama-cli<span class="w"> </span>
+</code></pre></div>

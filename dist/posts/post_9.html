@@ -1,0 +1,183 @@
+<p>本文档由 AI 总结，可能有错误。</p>
+<p>这篇论文研究的是：国产申威处理器虽然已经在超算、服务器等场景中应用，但软件生态尤其是 LLVM 这一类现代编译器基础设施仍然薄弱，导致很多依赖 LLVM 的系统和应用难以迁移。作者要解决的是，怎样让申威平台支持 LLVM 的即时编译能力，并进一步减少 JIT 在运行时“边编译边执行”带来的性能损失。论文的方法是：把 LLVM 的后端和 MCJIT 相关组件移植到申威 SW64 平台，再针对 JIT 中很耗时的指令选择流程做优化，最后用 test-suite 和 SPEC CPU2006 验证正确性与收益。</p>
+<h2 id="_1">论文信息</h2>
+<ul>
+<li>标题：基于国产平台的 LLVM JIT 编译优化技术研究</li>
+<li>作者：王洪生</li>
+<li>类型：专业硕士论文</li>
+<li>学校：郑州大学</li>
+<li>时间：2020 年 6 月</li>
+</ul>
+<h2 id="_2">研究问题</h2>
+<p>这篇论文聚焦两个问题：</p>
+<ol>
+<li>申威平台缺少 LLVM 支持，很多基于 LLVM 的应用难以移植。</li>
+<li>JIT 编译在运行时做代码生成，编译开销大，影响整体执行效率。</li>
+</ol>
+<p>换句话说，作者既要解决“能不能在申威上跑 LLVM JIT”，也要解决“跑起来之后够不够快”。</p>
+<h2 id="_3">背景</h2>
+<p>LLVM 已经成为现代编译基础设施的重要组成部分，特别是在：</p>
+<ul>
+<li>大数据</li>
+<li>人工智能</li>
+<li>动态语言运行时</li>
+<li>数据库与浏览器引擎</li>
+</ul>
+<p>等领域，JIT 已经非常常见。如果国产平台不能良好支持 LLVM，那么软件生态就会受到明显限制。论文因此把问题放在“自主可控软件生态”背景下讨论。</p>
+<h2 id="_4">论文的核心工作</h2>
+<h3 id="1-llvm">1. 分析 LLVM 即时编译框架</h3>
+<p>论文先梳理了 LLVM 中三代 JIT 体系的发展：</p>
+<ul>
+<li>早期 JIT</li>
+<li>MCJIT</li>
+<li>ORC JIT</li>
+</ul>
+<p>然后重点分析 MCJIT 的执行过程，包括：</p>
+<ul>
+<li>引擎创建</li>
+<li>代码生成</li>
+<li>对象加载</li>
+<li>重定位处理</li>
+<li>地址映射</li>
+<li>运行时动态链接</li>
+</ul>
+<p>作者认为，要在申威上支持 LLVM JIT，关键不只是后端能生成静态代码，还必须补齐 MC 层、对象输出和运行时动态链接等配套能力。</p>
+<h3 id="2-sw64">2. 完成 SW64 后端移植</h3>
+<p>论文基于 LLVM 后端移植机制，在申威 SW64 平台上实现了：</p>
+<ul>
+<li>代码生成器相关支持</li>
+<li>MC 层支持</li>
+<li>汇编输出能力</li>
+<li>可重定位目标文件输出</li>
+<li>运行时动态链接器相关支持</li>
+</ul>
+<p>这样申威平台不仅能“静态编译”，还能支持 JIT 在运行时生成并装载代码。</p>
+<h3 id="3-jit">3. 针对 JIT 做代码生成优化</h3>
+<p>论文指出，JIT 和 AOT 的优化目标不完全一样。AOT 可以接受更长的编译时间来换更高运行效率，而 JIT 编译时开销会直接吃掉程序运行时间，因此要特别关注“性价比最高”的优化环节。</p>
+<p>作者把重点放在指令选择阶段，原因是：</p>
+<ul>
+<li>在 LLVM 后端代码生成流程中，指令选择耗时占比较高</li>
+<li>JIT 下这一开销会直接影响程序响应速度</li>
+</ul>
+<p>因此论文为 SW64 后端实现了快速指令选择方案，目标是在略微牺牲部分最优性前提下，显著减少代码生成耗时。</p>
+<h2 id="_5">测试与结果</h2>
+<h3 id="1">1. 正确性验证</h3>
+<p>论文使用 LLVM test-suite 对移植后的申威 LLVM JIT 做正确性验证。结果表明：</p>
+<ul>
+<li>常规测试能够通过</li>
+<li>说明 SW64 后端及其 JIT 支持整体可用</li>
+</ul>
+<h3 id="2">2. 性能验证</h3>
+<p>论文使用 SPEC CPU2006 进行性能评估。文中给出的结果是：</p>
+<ul>
+<li>在完成快速指令选择优化后</li>
+<li>C/C++ 测试程序平均运行时间减少了 4.66%</li>
+</ul>
+<p>这个收益不算“颠覆式”，但对 JIT 场景来说很实际，因为它来自运行时编译路径上的真实优化。</p>
+<h2 id="_6">论文结论</h2>
+<p>作者总结的核心成果包括：</p>
+<ol>
+<li>把 LLVM 编译器及其 MCJIT 支持移植到申威 SW64 平台。</li>
+<li>补齐了 MC 层、汇编器、运行时动态链接等关键组件。</li>
+<li>基于指令选择实现了适合 JIT 场景的优化方案。</li>
+<li>通过 test-suite 和 SPEC CPU2006 验证了正确性和性能收益。</li>
+</ol>
+<p>同时论文也指出，后续仍可继续改进，例如：</p>
+<ul>
+<li>进一步完善 RuntimeDyld 对线程私有变量重定位的支持</li>
+<li>继续优化代码生成速度</li>
+<li>继续提升生成代码质量</li>
+</ul>
+<h2 id="_7">我的理解</h2>
+<p>这篇论文的价值在于，它不是泛泛谈“国产平台要做生态”，而是落到编译器里最难的一层：把 LLVM JIT 真正带到申威平台上。它解决的是生态建设中的“底层卡点”——没有 LLVM/JIT，很多现代软件框架就很难原生迁移。</p>
+<p>从工程上看，论文的思路很务实：</p>
+<ul>
+<li>先把 JIT 跑起来</li>
+<li>再分析最耗时的代码生成环节</li>
+<li>最后做适合 JIT 特性的局部优化</li>
+</ul>
+<p>这比一开始就追求激进优化更合理，也更符合基础设施建设顺序。</p>
+<h2 id="_8">论文原页图像（逐页保留，含全部图表）</h2>
+<p><img alt="第1页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-01.png" />
+<img alt="第2页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-02.png" />
+<img alt="第3页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-03.png" />
+<img alt="第4页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-04.png" />
+<img alt="第5页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-05.png" />
+<img alt="第6页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-06.png" />
+<img alt="第7页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-07.png" />
+<img alt="第8页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-08.png" />
+<img alt="第9页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-09.png" />
+<img alt="第10页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-10.png" />
+<img alt="第11页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-11.png" />
+<img alt="第12页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-12.png" />
+<img alt="第13页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-13.png" />
+<img alt="第14页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-14.png" />
+<img alt="第15页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-15.png" />
+<img alt="第16页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-16.png" />
+<img alt="第17页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-17.png" />
+<img alt="第18页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-18.png" />
+<img alt="第19页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-19.png" />
+<img alt="第20页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-20.png" />
+<img alt="第21页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-21.png" />
+<img alt="第22页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-22.png" />
+<img alt="第23页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-23.png" />
+<img alt="第24页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-24.png" />
+<img alt="第25页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-25.png" />
+<img alt="第26页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-26.png" />
+<img alt="第27页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-27.png" />
+<img alt="第28页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-28.png" />
+<img alt="第29页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-29.png" />
+<img alt="第30页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-30.png" />
+<img alt="第31页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-31.png" />
+<img alt="第32页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-32.png" />
+<img alt="第33页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-33.png" />
+<img alt="第34页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-34.png" />
+<img alt="第35页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-35.png" />
+<img alt="第36页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-36.png" />
+<img alt="第37页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-37.png" />
+<img alt="第38页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-38.png" />
+<img alt="第39页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-39.png" />
+<img alt="第40页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-40.png" />
+<img alt="第41页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-41.png" />
+<img alt="第42页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-42.png" />
+<img alt="第43页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-43.png" />
+<img alt="第44页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-44.png" />
+<img alt="第45页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-45.png" />
+<img alt="第46页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-46.png" />
+<img alt="第47页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-47.png" />
+<img alt="第48页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-48.png" />
+<img alt="第49页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-49.png" />
+<img alt="第50页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-50.png" />
+<img alt="第51页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-51.png" />
+<img alt="第52页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-52.png" />
+<img alt="第53页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-53.png" />
+<img alt="第54页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-54.png" />
+<img alt="第55页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-55.png" />
+<img alt="第56页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-56.png" />
+<img alt="第57页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-57.png" />
+<img alt="第58页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-58.png" />
+<img alt="第59页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-59.png" />
+<img alt="第60页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-60.png" />
+<img alt="第61页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-61.png" />
+<img alt="第62页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-62.png" />
+<img alt="第63页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-63.png" />
+<img alt="第64页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-64.png" />
+<img alt="第65页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-65.png" />
+<img alt="第66页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-66.png" />
+<img alt="第67页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-67.png" />
+<img alt="第68页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-68.png" />
+<img alt="第69页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-69.png" />
+<img alt="第70页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-70.png" />
+<img alt="第71页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-71.png" />
+<img alt="第72页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-72.png" />
+<img alt="第73页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-73.png" />
+<img alt="第74页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-74.png" />
+<img alt="第75页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-75.png" />
+<img alt="第76页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-76.png" />
+<img alt="第77页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-77.png" />
+<img alt="第78页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-78.png" />
+<img alt="第79页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-79.png" />
+<img alt="第80页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-80.png" />
+<img alt="第81页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-81.png" />
+<img alt="第82页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-82.png" />
+<img alt="第83页" src="posts/论文阅读/pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-83.png" /></p>

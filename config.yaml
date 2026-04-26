@@ -1,13 +1,13 @@
 # 站点配置
 site:
-  title: "我的个人博客"
-  author: "Your Name"
-  copyright: "© 2024 Your Name. All Rights Reserved."
-  beian: "某ICP备12345678号-1"
+  title: "DreamBlog"
+  author: "BinaryDumplings"
+  copyright: "© 2024 BinaryDumplings. All Rights Reserved."
+  beian: "津ICP备2024018227号-1"
   beian_url: "https://beian.miit.gov.cn/"
 
 # 社交链接
 social:
-  github: "https://github.com/your-handle"
-  email: "mailto:your-email@example.com"
-  twitter: "https://twitter.com/your-handle"
+  github: "https://github.com/DreamChaser-luzeyu"
+  email: "mailto:yydluzeyu#gmail.com (replace '#' with '@')"
+  # twitter: "https://twitter.com/your-handle"

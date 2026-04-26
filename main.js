@@ -63,6 +63,7 @@ createApp({
             }
             const folder = {
                 ...category,
+                viewMode: 'grid',
                 minimized: false,
                 maximized: false,
                 style: {
@@ -161,6 +162,14 @@ createApp({
 
         const getArticlesByCategory = (categoryId) => {
             return articles.value.filter(a => a.category === categoryId);
+        };
+
+        const setFolderViewMode = (folderId, mode) => {
+            const folder = openFolders.value.find(f => f.id === folderId);
+            if (folder) {
+                folder.viewMode = mode;
+                bringToFront(folderId, 'folder');
+            }
         };
 
         const openAbout = () => {
@@ -310,6 +319,7 @@ createApp({
             closeArticle,
             bringToFront,
             getArticlesByCategory,
+            setFolderViewMode,
             openAbout,
             openSocial,
             handleDrag,

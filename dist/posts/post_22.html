@@ -1,0 +1,44 @@
+<h1 id="_1">常用命令代理</h1>
+<div class="codehilite"><pre><span></span><code><span class="c1"># --- env</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">HTTP_PROXY</span><span class="o">=</span><span class="m">127</span>.0.0.1:7897
+<span class="nb">export</span><span class="w"> </span><span class="nv">HTTPS_PROXY</span><span class="o">=</span><span class="nv">$HTTP_PROXY</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">SOCKS5_PROXY</span><span class="o">=</span><span class="m">127</span>.0.0.1:7897
+<span class="nb">export</span><span class="w"> </span><span class="nv">ALL_PROXY</span><span class="o">=</span>socks5h://127.0.0.1:7897
+<span class="c1"># --- curl </span>
+curl<span class="w"> </span>ip.sb<span class="w"> </span>--proxy<span class="w"> </span>socks5://127.0.0.1:7897
+curl<span class="w"> </span>ip.sb<span class="w"> </span>--proxy<span class="w"> </span>socks5h://127.0.0.1:7897<span class="w"> </span><span class="c1"># remote resolve</span>
+<span class="c1"># --- wget</span>
+wget<span class="w"> </span>ip.sb<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;HTTP_PROXY=</span><span class="si">${</span><span class="nv">HTTP_PROXY</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;HTTPS_PROXY=</span><span class="si">${</span><span class="nv">HTTPS_PROXY</span><span class="si">}</span><span class="s2">&quot;</span>
+<span class="c1"># --- apt</span>
+<span class="c1"># socks5 seems not working</span>
+sudo<span class="w"> </span>apt<span class="w"> </span>-o<span class="w"> </span>Acquire::socks::proxy<span class="o">=</span><span class="s2">&quot;socks5://</span><span class="si">${</span><span class="nv">SOCKS5_PROXY</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span>update
+sudo<span class="w"> </span>apt<span class="w"> </span>-o<span class="w"> </span>Acquire::http::proxy<span class="o">=</span><span class="s2">&quot;http://</span><span class="si">${</span><span class="nv">HTTP_PROXY</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span>update
+sudo<span class="w"> </span>apt<span class="w"> </span>-o<span class="w"> </span>Acquire::http::proxy<span class="o">=</span><span class="s2">&quot;socks5h://</span><span class="si">${</span><span class="nv">SOCKS5_PROXY</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span>update
+<span class="c1"># --- git</span>
+<span class="c1"># set</span>
+git<span class="w"> </span>config<span class="w"> </span>--global<span class="w"> </span>http.proxy<span class="w"> </span>socks5h://<span class="si">${</span><span class="nv">SOCKS5_PROXY</span><span class="si">}</span>
+git<span class="w"> </span>config<span class="w"> </span>--global<span class="w"> </span>https.proxy<span class="w"> </span>socks5h://<span class="si">${</span><span class="nv">SOCKS5_PROXY</span><span class="si">}</span>
+<span class="c1"># unset</span>
+git<span class="w"> </span>config<span class="w"> </span>--global<span class="w"> </span>--unset<span class="w"> </span>http.proxy
+git<span class="w"> </span>config<span class="w"> </span>--global<span class="w"> </span>--unset<span class="w"> </span>https.proxy
+<span class="c1"># --- docker</span>
+mkdir<span class="w"> </span>-p<span class="w"> </span>/etc/systemd/system/docker.service.d
+touch<span class="w"> </span>/etc/systemd/system/docker.service.d/http-proxy.conf
+cat<span class="w"> </span>&gt;<span class="w"> </span>/etc/systemd/system/docker.service.d/http-proxy.conf<span class="w"> </span><span class="s">&lt;&lt; EOF</span>
+<span class="s">[Service]</span>
+<span class="s">Environment=&quot;HTTP_PROXY=127.0.0.1:7897&quot;</span>
+<span class="s">Environment=&quot;HTTPS_PROXY=127.0.0.1:7897&quot;</span>
+<span class="s">EOF</span>
+systemctl<span class="w"> </span>daemon-reload
+systemctl<span class="w"> </span>restart<span class="w"> </span>docker
+systemctl<span class="w"> </span>show<span class="w"> </span>--property<span class="o">=</span>Environment<span class="w"> </span>docker
+
+<span class="c1"># --- pip</span>
+<span class="c1"># temporary</span>
+pip<span class="w"> </span>install<span class="w"> </span>onnxruntime<span class="w"> </span>--proxy<span class="o">=</span><span class="s2">&quot;socks5h://10.107.1.101:7890&quot;</span>
+<span class="c1"># set</span>
+pip<span class="w"> </span>install<span class="w"> </span>pysocks
+pip<span class="w"> </span>config<span class="w"> </span><span class="nb">set</span><span class="w"> </span>global.socks<span class="w"> </span>socks5h://10.107.1.101:7890
+<span class="c1"># unset</span>
+pip<span class="w"> </span>config<span class="w"> </span><span class="nb">set</span><span class="w"> </span>global.proxy<span class="w"> </span>None
+</code></pre></div>
