@@ -118,10 +118,26 @@
             <div class="webde-window-content window-content-enable">
                 <div v-if="win.type === 'iframe'" class="iframe-container">
                     <iframe :src="win.url" frameborder="0" style="width:100%; height:100%"></iframe>
-                    <!-- 未激活时的遮罩层，用于捕捉点击事件并激活窗口 -->
                     <div v-if="activeWindowId !== win.id" class="iframe-click-overlay"></div>
                 </div>
-                <div v-else class="article-render-content" v-html="win.content"></div>
+                <div v-else class="article-layout">
+                    <aside v-if="win.toc && win.toc.length" class="article-toc">
+                        <div class="article-toc-title">目录</div>
+                        <button
+                            v-for="item in win.toc"
+                            :key="item.id"
+                            type="button"
+                            class="article-toc-link"
+                            :class="`level-${item.level}`"
+                            @click.stop="scrollToHeading(win.id, item.id)"
+                        >
+                            {{ item.text }}
+                        </button>
+                    </aside>
+                    <div class="article-body" :data-article-id="win.id">
+                        <div class="article-render-content" v-html="win.content"></div>
+                    </div>
+                </div>
             </div>
             <!-- 缩放手柄 -->
             <div class="resizer n" @mousedown.stop="handleResize($event, win, 'article', 'n')"></div>

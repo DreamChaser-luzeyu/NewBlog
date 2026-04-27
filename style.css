@@ -310,14 +310,79 @@ body {
 }
 
 /* Markdown 文章排版样式 */
+.article-window .webde-window-content {
+    padding: 0;
+    overflow: hidden;
+}
+
+.article-layout {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+}
+
+.article-toc {
+    width: 220px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 18px 12px;
+    border-right: 1px solid rgba(0, 0, 0, 0.08);
+    background: rgba(248, 249, 251, 0.92);
+    overflow-y: auto;
+}
+
+.article-toc-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #222;
+    margin-bottom: 4px;
+}
+
+.article-toc-link {
+    width: 100%;
+    border: none;
+    background: transparent;
+    text-align: left;
+    color: #4a4a4a;
+    font-size: 13px;
+    line-height: 1.5;
+    padding: 6px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.article-toc-link:hover {
+    background: rgba(62, 126, 247, 0.1);
+    color: #2457c5;
+}
+
+.article-toc-link.level-2 {
+    padding-left: 18px;
+}
+
+.article-toc-link.level-3 {
+    padding-left: 28px;
+}
+
+.article-body {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+}
+
 .article-render-content {
     color: #333;
     line-height: 1.6;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    padding: 20px;
 }
 
-.article-render-content h1, 
-.article-render-content h2, 
+.article-render-content h1,
+.article-render-content h2,
 .article-render-content h3 {
     margin-top: 24px;
     margin-bottom: 16px;

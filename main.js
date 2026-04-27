@@ -83,6 +83,66 @@ createApp({
             if (activeWindowId.value === id) activeWindowId.value = null;
         };
 
+        const prepareArticleContent = (rawContent) => {
+            if (!rawContent) {
+                return {
+                    content: '',
+                    toc: []
+                };
+            }
+
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(rawContent, 'text/html');
+            const headings = Array.from(doc.body.querySelectorAll('h1, h2, h3'));
+            const usedIds = new Set();
+            const toc = headings.map((heading, index) => {
+                const text = heading.textContent.trim();
+                const level = Number.parseInt(heading.tagName.slice(1), 10);
+                let id = heading.id || text
+                    .toLowerCase()
+                    .replace(/[^\w\u4e00-\u9fa5\s-]/g, '')
+                    .trim()
+                    .replace(/\s+/g, '-');
+
+                if (!id) {
+                    id = `heading-${index + 1}`;
+                }
+
+                const baseId = id;
+                let suffix = 2;
+                while (usedIds.has(id)) {
+                    id = `${baseId}-${suffix++}`;
+                }
+                usedIds.add(id);
+                heading.id = id;
+
+                return {
+                    id,
+                    text,
+                    level
+                };
+            });
+
+            return {
+                content: doc.body.innerHTML,
+                toc
+            };
+        };
+
+        const scrollToHeading = (articleId, headingId) => {
+            const articleBody = document.querySelector(`.article-body[data-article-id="${articleId}"]`);
+            const heading = articleBody?.querySelector(`#${CSS.escape(headingId)}`);
+            if (!articleBody || !heading) {
+                return;
+            }
+
+            articleBody.scrollTo({
+                top: heading.offsetTop - 16,
+                behavior: 'smooth'
+            });
+            bringToFront(articleId, 'article');
+        };
+
         const openArticle = async (article) => {
             const existing = openArticles.value.find(a => a.id === article.id);
             if (existing) {
@@ -91,7 +151,6 @@ createApp({
                 return;
             }
 
-            // 如果内容还没加载，则进行异步加载
             let content = article.content || '';
             if (!content && article.content_url) {
                 try {
@@ -102,9 +161,11 @@ createApp({
                 }
             }
 
+            const preparedArticle = prepareArticleContent(content);
             const win = {
                 ...article,
-                content: content, // 将加载好的内容存入窗口对象
+                content: preparedArticle.content,
+                toc: preparedArticle.toc,
                 minimized: false,
                 maximized: false,
                 style: {
@@ -326,6 +387,7 @@ createApp({
             handleResize,
             minimizeWindow,
             maximizeWindow,
+            scrollToHeading,
             activeWindowId
         };
     }
