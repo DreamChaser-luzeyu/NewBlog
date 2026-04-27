@@ -1,44 +1,32 @@
-<h1 id="_1">常用命令代理</h1>
-<div class="codehilite"><pre><span></span><code><span class="c1"># --- env</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">HTTP_PROXY</span><span class="o">=</span><span class="m">127</span>.0.0.1:7897
-<span class="nb">export</span><span class="w"> </span><span class="nv">HTTPS_PROXY</span><span class="o">=</span><span class="nv">$HTTP_PROXY</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">SOCKS5_PROXY</span><span class="o">=</span><span class="m">127</span>.0.0.1:7897
-<span class="nb">export</span><span class="w"> </span><span class="nv">ALL_PROXY</span><span class="o">=</span>socks5h://127.0.0.1:7897
-<span class="c1"># --- curl </span>
-curl<span class="w"> </span>ip.sb<span class="w"> </span>--proxy<span class="w"> </span>socks5://127.0.0.1:7897
-curl<span class="w"> </span>ip.sb<span class="w"> </span>--proxy<span class="w"> </span>socks5h://127.0.0.1:7897<span class="w"> </span><span class="c1"># remote resolve</span>
-<span class="c1"># --- wget</span>
-wget<span class="w"> </span>ip.sb<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;HTTP_PROXY=</span><span class="si">${</span><span class="nv">HTTP_PROXY</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;HTTPS_PROXY=</span><span class="si">${</span><span class="nv">HTTPS_PROXY</span><span class="si">}</span><span class="s2">&quot;</span>
-<span class="c1"># --- apt</span>
-<span class="c1"># socks5 seems not working</span>
-sudo<span class="w"> </span>apt<span class="w"> </span>-o<span class="w"> </span>Acquire::socks::proxy<span class="o">=</span><span class="s2">&quot;socks5://</span><span class="si">${</span><span class="nv">SOCKS5_PROXY</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span>update
-sudo<span class="w"> </span>apt<span class="w"> </span>-o<span class="w"> </span>Acquire::http::proxy<span class="o">=</span><span class="s2">&quot;http://</span><span class="si">${</span><span class="nv">HTTP_PROXY</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span>update
-sudo<span class="w"> </span>apt<span class="w"> </span>-o<span class="w"> </span>Acquire::http::proxy<span class="o">=</span><span class="s2">&quot;socks5h://</span><span class="si">${</span><span class="nv">SOCKS5_PROXY</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span>update
-<span class="c1"># --- git</span>
-<span class="c1"># set</span>
-git<span class="w"> </span>config<span class="w"> </span>--global<span class="w"> </span>http.proxy<span class="w"> </span>socks5h://<span class="si">${</span><span class="nv">SOCKS5_PROXY</span><span class="si">}</span>
-git<span class="w"> </span>config<span class="w"> </span>--global<span class="w"> </span>https.proxy<span class="w"> </span>socks5h://<span class="si">${</span><span class="nv">SOCKS5_PROXY</span><span class="si">}</span>
-<span class="c1"># unset</span>
-git<span class="w"> </span>config<span class="w"> </span>--global<span class="w"> </span>--unset<span class="w"> </span>http.proxy
-git<span class="w"> </span>config<span class="w"> </span>--global<span class="w"> </span>--unset<span class="w"> </span>https.proxy
-<span class="c1"># --- docker</span>
-mkdir<span class="w"> </span>-p<span class="w"> </span>/etc/systemd/system/docker.service.d
-touch<span class="w"> </span>/etc/systemd/system/docker.service.d/http-proxy.conf
-cat<span class="w"> </span>&gt;<span class="w"> </span>/etc/systemd/system/docker.service.d/http-proxy.conf<span class="w"> </span><span class="s">&lt;&lt; EOF</span>
-<span class="s">[Service]</span>
-<span class="s">Environment=&quot;HTTP_PROXY=127.0.0.1:7897&quot;</span>
-<span class="s">Environment=&quot;HTTPS_PROXY=127.0.0.1:7897&quot;</span>
-<span class="s">EOF</span>
-systemctl<span class="w"> </span>daemon-reload
-systemctl<span class="w"> </span>restart<span class="w"> </span>docker
-systemctl<span class="w"> </span>show<span class="w"> </span>--property<span class="o">=</span>Environment<span class="w"> </span>docker
+<h1 id="radvd">RADVD配置</h1>
+<div class="codehilite"><pre><span></span><code>apt<span class="w"> </span>install<span class="w"> </span>radvd
 
-<span class="c1"># --- pip</span>
-<span class="c1"># temporary</span>
-pip<span class="w"> </span>install<span class="w"> </span>onnxruntime<span class="w"> </span>--proxy<span class="o">=</span><span class="s2">&quot;socks5h://10.107.1.101:7890&quot;</span>
-<span class="c1"># set</span>
-pip<span class="w"> </span>install<span class="w"> </span>pysocks
-pip<span class="w"> </span>config<span class="w"> </span><span class="nb">set</span><span class="w"> </span>global.socks<span class="w"> </span>socks5h://10.107.1.101:7890
-<span class="c1"># unset</span>
-pip<span class="w"> </span>config<span class="w"> </span><span class="nb">set</span><span class="w"> </span>global.proxy<span class="w"> </span>None
+<span class="nb">export</span><span class="w"> </span><span class="nv">RA_IF</span><span class="o">=</span><span class="s2">&quot;enp1s0&quot;</span>
+<span class="c1"># 前缀必须是64</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">RA_IPV6_CIDR</span><span class="o">=</span><span class="s2">&quot;2a12:ab80:3:2100::/64&quot;</span>
+cat<span class="w"> </span>&gt;<span class="w"> </span>/etc/radvd.conf<span class="w"> </span><span class="s">&lt;&lt; EOF</span>
+<span class="s">interface ${RA_IF} {</span>
+<span class="s">    AdvSendAdvert on;</span>
+<span class="s">    AdvManagedFlag on;</span>
+<span class="s">    AdvOtherConfigFlag on;</span>
+<span class="s">    prefix ${RA_IPV6_CIDR} {</span>
+<span class="s">        AdvOnLink on;</span>
+<span class="s">        AdvAutonomous on;</span>
+<span class="s">        AdvRouterAddr off;  </span>
+<span class="s">    };</span>
+<span class="s">    # 对于旁路由还需配置route，2000::/3是全球单拨地址范围</span>
+<span class="s">    # 如果希望IPv6不流经旁路由，可以略去这部分</span>
+<span class="s">    route 2000::/3 {</span>
+<span class="s">        AdvRouteLifetime 1800;</span>
+<span class="s">        AdvRoutePreference high;  # 宣称为高优先级，旁路由掉线可自动切换为主路由</span>
+<span class="s">    };</span>
+<span class="s">};</span>
+<span class="s">EOF</span>
+<span class="nb">unset</span><span class="w"> </span>RA_IF
+<span class="nb">unset</span><span class="w"> </span>RA_IPV6_CIDR
+cat<span class="w"> </span>/etc/radvd.conf
+<span class="c1"># 启动服务</span>
+systemctl<span class="w"> </span><span class="nb">enable</span><span class="w"> </span>radvd
+systemctl<span class="w"> </span>restart<span class="w"> </span>radvd
+systemctl<span class="w"> </span>status<span class="w"> </span>radvd
 </code></pre></div>

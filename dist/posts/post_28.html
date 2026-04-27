@@ -1,57 +1,60 @@
-<h1 id="dockernetmaker">docker部署netmaker</h1>
-<div class="codehilite"><pre><span></span><code>mkdir<span class="w"> </span>netmaker
-<span class="nb">cd</span><span class="w"> </span>netmaker
-wget<span class="w"> </span>https://github.com/gravitl/netmaker/raw/master/compose/docker-compose.yml
-sed<span class="w"> </span>-i<span class="w"> </span><span class="s2">&quot;s/80:80/10080:80/g&quot;</span><span class="w"> </span>./docker-compose.yml
-sed<span class="w"> </span>-i<span class="w"> </span><span class="s2">&quot;s/443:443/10443:443/g&quot;</span><span class="w"> </span>./docker-compose.yml
-
-cat<span class="w"> </span><span class="s">&lt;&lt; EOF &gt; ./netmaker.env</span>
-<span class="s">SERVER_IMAGE_TAG=latest</span>
-<span class="s">UI_IMAGE_TAG=latest</span>
-<span class="s">SERVER_HOST=203.0.113.27</span>
-<span class="s">NM_DOMAIN=nm.dreamchaser-luzeyu.cn</span>
-<span class="s">EOF</span>
-
-cat<span class="w"> </span><span class="s">&lt;&lt; EOF &gt; ./Caddyfile</span>
-<span class="s">{</span>
-<span class="s">    email yydluzeyu@gmail.com</span>
-<span class="s">}</span>
-<span class="s"># Dashboard</span>
-<span class="s">https://dashboard.nm.dreamchaser-luzeyu.cn {</span>
-<span class="s">    # Apply basic security headers</span>
-<span class="s">    header {</span>
-<span class="s">            # Enable cross origin access to *.NETMAKER_BASE_DOMAIN</span>
-<span class="s">            Access-Control-Allow-Origin *.nm.dreamchaser-luzeyu.cn</span>
-<span class="s">            # Enable HTTP Strict Transport Security (HSTS)</span>
-<span class="s">            Strict-Transport-Security &quot;max-age=31536000;&quot;</span>
-<span class="s">            # Enable cross-site filter (XSS) and tell browser to block detected attacks</span>
-<span class="s">            X-XSS-Protection &quot;1; mode=block&quot;</span>
-<span class="s">            # Disallow the site to be rendered within a frame on a foreign domain (clickjacking protection)</span>
-<span class="s">            X-Frame-Options &quot;SAMEORIGIN&quot;</span>
-<span class="s">            # Prevent search engines from indexing</span>
-<span class="s">            X-Robots-Tag &quot;none&quot;</span>
-<span class="s">            # Remove the server name</span>
-<span class="s">            -Server</span>
-<span class="s">    }</span>
-
-<span class="s">    reverse_proxy http://netmaker-ui</span>
-<span class="s">}</span>
-<span class="s"># API</span>
-<span class="s">https://api.nm.dreamchaser-luzeyu.cn {</span>
-<span class="s">        reverse_proxy http://netmaker:8081</span>
-<span class="s">}</span>
-<span class="s"># MQ</span>
-<span class="s">wss://broker.nm.dreamchaser-luzeyu.cn {</span>
-<span class="s">        reverse_proxy ws://mq:8883</span>
-<span class="s">}</span>
-<span class="s">EOF</span>
-
-<span class="c1"># 将*.nm.dreamchaser-luzeyu.cn代理到10080和10443</span>
-
-docker-compose<span class="w"> </span>-f<span class="w"> </span>./docker-compose.yml
+<h1 id="headscale">Headscale部署</h1>
+<h2 id="headscale-ui">下载Headscale-ui</h2>
+<div class="codehilite"><pre><span></span><code>wget<span class="w"> </span>https://github.com/gurucomputing/headscale-ui/releases/download/2024.02.24-beta1/headscale-ui.zip<span class="w"> </span>-O<span class="w"> </span>/tmp/headscale.zip
+<span class="nb">cd</span><span class="w"> </span>/tmp
+unzip<span class="w"> </span>./headscale.zip
+mkdir<span class="w"> </span>/usr/local/www/
+mv<span class="w"> </span>./web<span class="w"> </span>/usr/local/www/headscale-ui
 </code></pre></div>
 
-<div class="codehilite"><pre><span></span><code><span class="c1">#</span>
-sudo<span class="w"> </span>wget<span class="w"> </span>-qO<span class="w"> </span>/root/nm-quick.sh<span class="w"> </span>https://raw.githubusercontent.com/gravitl/netmaker/master/scripts/nm-quick.sh<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>sudo<span class="w"> </span>chmod<span class="w"> </span>+x<span class="w"> </span>/root/nm-quick.sh<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>sudo<span class="w"> </span>/root/nm-quick.sh
-/root/nm-quick.sh<span class="w"> </span>-d
+<h2 id="headscale_1">配置Headscale</h2>
+<ul>
+<li>
+<p>修改<code>server_url</code></p>
+</li>
+<li>
+<p>修改<code>listen_addr</code></p>
+</li>
+</ul>
+<p>其他按需修改</p>
+<p>配置API:</p>
+<div class="codehilite"><pre><span></span><code>headscale<span class="w"> </span>api<span class="w"> </span>create
+</code></pre></div>
+
+<h2 id="nginx">配置Nginx</h2>
+<p><code>nano /etc/nginx/conf.d/headscale.conf</code></p>
+<div class="codehilite"><pre><span></span><code><span class="k">server</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kn">server_name</span><span class="w"> </span><span class="s">hs.020124.xyz</span><span class="p">;</span>
+
+<span class="w">        </span><span class="c1"># Security / XSS Mitigation Headers</span>
+<span class="w">        </span><span class="kn">add_header</span><span class="w"> </span><span class="s">X-Frame-Options</span><span class="w"> </span><span class="s">&quot;SAMEORIGIN&quot;</span><span class="p">;</span>
+<span class="w">        </span><span class="kn">add_header</span><span class="w"> </span><span class="s">X-XSS-Protection</span><span class="w"> </span><span class="s">&quot;1</span><span class="p">;</span><span class="w"> </span><span class="kn">mode=block&quot;</span><span class="p">;</span>
+<span class="w">        </span><span class="kn">add_header</span><span class="w"> </span><span class="s">X-Content-Type-Options</span><span class="w"> </span><span class="s">&quot;nosniff&quot;</span><span class="p">;</span>
+
+<span class="w">        </span><span class="kn">location</span><span class="w"> </span><span class="s">/web</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="kn">proxy_set_header</span><span class="w"> </span><span class="s">Host</span><span class="w"> </span><span class="nv">$host</span><span class="p">;</span>
+<span class="w">            </span><span class="kn">proxy_set_header</span><span class="w"> </span><span class="s">X-Real-IP</span><span class="w"> </span><span class="nv">$remote_addr</span><span class="p">;</span>
+<span class="w">            </span><span class="kn">alias</span><span class="w"> </span><span class="s">/usr/local/www/headscale-ui</span><span class="p">;</span>
+<span class="w">            </span><span class="kn">index</span><span class="w"> </span><span class="s">index.html</span><span class="p">;</span>
+<span class="w">        </span><span class="p">}</span>
+
+<span class="w">        </span><span class="kn">location</span><span class="w"> </span><span class="s">/</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="kn">proxy_pass</span><span class="w"> </span><span class="s">http://127.0.0.1:10080</span><span class="p">;</span>
+<span class="w">            </span><span class="kn">proxy_http_version</span><span class="w"> </span><span class="mi">1</span><span class="s">.1</span><span class="p">;</span>
+<span class="w">            </span><span class="kn">proxy_set_header</span><span class="w"> </span><span class="s">Upgrade</span><span class="w"> </span><span class="nv">$http_upgrade</span><span class="p">;</span>
+<span class="w">            </span><span class="kn">proxy_set_header</span><span class="w"> </span><span class="s">Connection</span><span class="w"> </span><span class="s">&quot;upgrade&quot;</span><span class="p">;</span>
+<span class="w">            </span><span class="kn">proxy_set_header</span><span class="w"> </span><span class="s">Host</span><span class="w"> </span><span class="nv">$host</span><span class="p">;</span>
+<span class="w">            </span><span class="kn">proxy_redirect</span><span class="w"> </span><span class="s">http://</span><span class="w"> </span><span class="s">https://</span><span class="p">;</span>
+<span class="w">            </span><span class="kn">proxy_buffering</span><span class="w"> </span><span class="no">off</span><span class="p">;</span>
+<span class="w">            </span><span class="kn">proxy_set_header</span><span class="w"> </span><span class="s">X-Real-IP</span><span class="w"> </span><span class="nv">$remote_addr</span><span class="p">;</span>
+<span class="w">            </span><span class="kn">proxy_set_header</span><span class="w"> </span><span class="s">X-Forwarded-For</span><span class="w"> </span><span class="nv">$proxy_add_x_forwarded_for</span><span class="p">;</span>
+<span class="w">            </span><span class="kn">proxy_set_header</span><span class="w"> </span><span class="s">X-Forwarded-Proto</span><span class="w"> </span><span class="nv">$http_x_forwarded_proto</span><span class="p">;</span>
+<span class="w">            </span><span class="kn">add_header</span><span class="w"> </span><span class="s">Strict-Transport-Security</span><span class="w"> </span><span class="s">&quot;max-age=15552000</span><span class="p">;</span><span class="w"> </span><span class="kn">includeSubDomains&quot;</span><span class="w"> </span><span class="s">always</span><span class="p">;</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>进入<code>https://hs.020124.xyz/web</code>后填入api key</p>
+<h2 id="_1">客户端</h2>
+<div class="codehilite"><pre><span></span><code>tailscale<span class="w"> </span>up<span class="w"> </span>--login-server<span class="w"> </span>https://hs.020124.xyz/
 </code></pre></div>

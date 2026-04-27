@@ -1,19 +1,71 @@
-<div class="codehilite"><pre><span></span><code><span class="c1"># Usage: </span>
-<span class="c1"># 安装符号链接 update-alternatives --install &lt;link&gt; &lt;name&gt; &lt;path&gt; &lt;priority&gt;</span>
-<span class="c1"># 注：priority数值越大，优先级越高？需要确认</span>
-<span class="c1"># 删除符号链接 update-alternatives --remove &lt;name&gt; &lt;path&gt;</span>
+<h1 id="ospf">OSPF配置</h1>
+<p>网络拓扑：一台国内服务器A，两台境外服务器B和C</p>
+<p>A</p>
+<div class="codehilite"><pre><span></span><code><span class="k">log</span><span class="w"> </span><span class="s">syslog</span><span class="w"> </span><span class="s">all</span><span class="p">;</span>
+<span class="k">debug</span><span class="w"> </span><span class="s">protocols</span><span class="w"> </span><span class="s">all</span><span class="p">;</span>
 
-<span class="c1"># Example: 切换aarch64-linux-gnu-gcc版本</span>
-<span class="c1"># 假设$PATH里存在aarch64-linux-gnu-gcc-11和aarch64-linux-gnu-gcc-12</span>
-update-alternatives<span class="w"> </span>--install<span class="w"> </span><span class="se">\</span>
-<span class="w">    </span><span class="k">$(</span>which<span class="w"> </span>aarch64-linux-gnu-gcc<span class="k">)</span><span class="w"> </span><span class="se">\</span>
-<span class="w">    </span>aarch64-linux-gnu-gcc<span class="w"> </span><span class="se">\</span>
-<span class="w">    </span><span class="k">$(</span>which<span class="w"> </span>aarch64-linux-gnu-gcc-11<span class="k">)</span><span class="w"> </span><span class="m">50</span>
-update-alternatives<span class="w"> </span>--install<span class="w"> </span><span class="se">\</span>
-<span class="w">    </span><span class="k">$(</span>which<span class="w"> </span>aarch64-linux-gnu-gcc<span class="k">)</span><span class="w"> </span><span class="se">\</span>
-<span class="w">    </span>aarch64-linux-gnu-gcc<span class="w"> </span><span class="se">\</span>
-<span class="w">    </span><span class="k">$(</span>which<span class="w"> </span>aarch64-linux-gnu-gcc-12<span class="k">)</span><span class="w"> </span><span class="m">40</span>
-update-alternatives<span class="w"> </span>--config<span class="w"> </span>aarch64-linux-gnu-gcc
-<span class="c1"># 选取一个即可</span>
-aarch64-linux-gnu-gcc<span class="w"> </span>--version
+<span class="k">router</span><span class="w"> </span><span class="s">id</span><span class="w"> </span><span class="mi">172</span><span class="s">.16.0.3</span>
+
+<span class="s">pr</span>
+
+<span class="s">protocol</span><span class="w"> </span><span class="s">static</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1"># Bypass addresses here</span>
+<span class="w">    </span><span class="kn">route</span><span class="w"> </span><span class="mi">203</span><span class="s">.0.113.13/32</span><span class="w"> </span><span class="s">via</span><span class="w"> </span><span class="s">&quot;eth0&quot;</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">protocol</span><span class="w"> </span><span class="s">kernel</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kn">ipv4</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kn">export</span><span class="w"> </span><span class="s">all</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="kn">ipv6</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kn">export</span><span class="w"> </span><span class="s">all</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">protocol</span><span class="w"> </span><span class="s">ospf</span><span class="w"> </span><span class="s">v2</span><span class="w"> </span><span class="s">hkwepc</span><span class="w"> </span><span class="p">{</span><span class="w"> </span>
+<span class="w">    </span><span class="kn">ipv4</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kn">export</span><span class="w"> </span><span class="s">none</span><span class="p">;</span>
+<span class="w">        </span><span class="kn">import</span><span class="w"> </span><span class="s">where</span><span class="w"> </span><span class="s">net</span><span class="w"> </span><span class="s">!~</span><span class="w"> </span><span class="mi">172</span><span class="s">.16.0.0/16</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="kn">ipv6</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kn">export</span><span class="w"> </span><span class="s">none</span><span class="p">;</span>
+<span class="w">        </span><span class="kn">import</span><span class="w"> </span><span class="s">where</span><span class="w"> </span><span class="s">net</span><span class="w"> </span><span class="s">!~</span><span class="w"> </span><span class="n">fdff</span><span class="p">:</span><span class="mi">520</span><span class="p">::</span><span class="s">/32</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="kn">area</span><span class="w"> </span><span class="mi">172</span><span class="s">.16.4.0</span><span class="w"> </span><span class="p">{</span><span class="w"> </span>
+<span class="w">        </span><span class="kn">interface</span><span class="w"> </span><span class="s">&quot;hkwepc&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="kn">cost</span><span class="w"> </span><span class="mi">5</span><span class="p">;</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>B - hkwepc</p>
+<div class="codehilite"><pre><span></span><code><span class="k">log</span><span class="w"> </span><span class="s">syslog</span><span class="w"> </span><span class="s">all</span><span class="p">;</span>
+<span class="k">debug</span><span class="w"> </span><span class="s">protocols</span><span class="w"> </span><span class="s">all</span><span class="p">;</span>
+
+<span class="k">router</span><span class="w"> </span><span class="s">id</span><span class="w"> </span><span class="mi">172</span><span class="s">.16.4.1</span><span class="p">;</span>
+
+<span class="k">protocol</span><span class="w"> </span><span class="s">static</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1"># blocked addresses here</span>
+<span class="w">    </span><span class="kn">route</span><span class="w"> </span><span class="mi">203</span><span class="s">.0.113.13/32</span><span class="w"> </span><span class="s">via</span><span class="w"> </span><span class="s">&quot;eth0&quot;</span><span class="p">;</span>
+<span class="w">    </span><span class="kn">route</span><span class="w"> </span><span class="mi">203</span><span class="s">.0.113.12/32</span><span class="w"> </span><span class="s">via</span><span class="w"> </span><span class="s">&quot;eth0&quot;</span><span class="p">;</span>
+<span class="w">    </span><span class="kn">route</span><span class="w"> </span><span class="mi">203</span><span class="s">.0.113.14/32</span><span class="w"> </span><span class="s">via</span><span class="w"> </span><span class="s">&quot;eth0&quot;</span><span class="p">;</span>
+<span class="w">    </span><span class="kn">route</span><span class="w"> </span><span class="mi">203</span><span class="s">.0.113.15/32</span><span class="w"> </span><span class="s">via</span><span class="w"> </span><span class="s">&quot;eth0&quot;</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">protocol</span><span class="w"> </span><span class="s">ospf</span><span class="w"> </span><span class="s">v2</span><span class="w"> </span><span class="s">hkwepc</span><span class="w"> </span><span class="p">{</span><span class="w"> </span>
+<span class="w">    </span><span class="kn">ipv4</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kn">export</span><span class="w"> </span><span class="s">static</span><span class="p">;</span>
+<span class="w">        </span><span class="kn">import</span><span class="w"> </span><span class="s">none</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="kn">ipv6</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kn">export</span><span class="w"> </span><span class="s">static</span><span class="p">;</span>
+<span class="w">        </span><span class="kn">import</span><span class="w"> </span><span class="s">none</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="kn">area</span><span class="w"> </span><span class="mi">172</span><span class="s">.16.4.0</span><span class="w"> </span><span class="p">{</span><span class="w"> </span>
+<span class="w">        </span><span class="kn">interface</span><span class="w"> </span><span class="s">&quot;wgcn&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="kn">cost</span><span class="w"> </span><span class="mi">5</span><span class="p">;</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
 </code></pre></div>

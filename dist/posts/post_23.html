@@ -1,78 +1,223 @@
-<h2 id="ip">常用ip命令</h2>
-<div class="codehilite"><pre><span></span><code>ip<span class="w"> </span>route<span class="w"> </span><span class="c1"># 打印main路由表</span>
-ip<span class="w"> </span>route<span class="w"> </span>show<span class="w"> </span>table<span class="w"> </span>main<span class="w"> </span><span class="c1"># 打印main路由表的路由</span>
-ip<span class="w"> </span>route<span class="w"> </span>show<span class="w"> </span>table<span class="w"> </span>all<span class="w"> </span><span class="c1"># 打印全部路由表的路由</span>
-ip<span class="w"> </span>route<span class="w"> </span>get<span class="w"> </span><span class="m">203</span>.0.113.12<span class="w"> </span><span class="c1"># 获得1.1.1.1使用的路由</span>
-ip<span class="w"> </span>rule<span class="w"> </span><span class="c1"># 打印路由策略，数字表示优先级（数字小的优先）</span>
-ip<span class="w"> </span>rule<span class="w"> </span>add<span class="w"> </span>table<span class="w"> </span><span class="m">20124</span><span class="w"> </span><span class="c1"># </span>
-ip<span class="w"> </span>rule<span class="w"> </span>add<span class="w"> </span>from<span class="w"> </span><span class="m">192</span>.168.1.0/24<span class="w"> </span>table<span class="w"> </span><span class="m">1</span><span class="w"> </span>prio<span class="w"> </span><span class="m">10</span><span class="w"> </span><span class="c1"># 对于来自192.168.1.0/24的流量查询路由表1,优先级10</span>
-ip<span class="w"> </span>rule<span class="w"> </span>add<span class="w"> </span>from<span class="w"> </span><span class="m">192</span>.168.2.0/24<span class="w"> </span>table<span class="w"> </span><span class="m">2</span><span class="w"> </span><span class="c1"># 对于来自192.168.2.0/24的流量查询路由表2,优先级自动（从32766递减）</span>
-<span class="c1"># 注：ip rule add table &lt;id&gt;命令会同时创建一个路由表</span>
+<h1 id="dockerderp">Docker部署derp</h1>
+<h2 id="docker-pull">配置docker pull代理</h2>
+<div class="codehilite"><pre><span></span><code>mkdir<span class="w"> </span>-p<span class="w"> </span>/etc/systemd/system/docker.service.d
+touch<span class="w"> </span>/etc/systemd/system/docker.service.d/http-proxy.conf
+cat<span class="w"> </span>&gt;<span class="w"> </span>/etc/systemd/system/docker.service.d/http-proxy.conf<span class="w"> </span><span class="s">&lt;&lt; EOF</span>
+<span class="s">[Service]</span>
+<span class="s">Environment=&quot;HTTP_PROXY=127.0.0.1:7897&quot;</span>
+<span class="s">Environment=&quot;HTTPS_PROXY=127.0.0.1:7897&quot;</span>
+<span class="s">EOF</span>
+systemctl<span class="w"> </span>daemon-reload
+systemctl<span class="w"> </span>restart<span class="w"> </span>docker
+systemctl<span class="w"> </span>show<span class="w"> </span>--property<span class="o">=</span>Environment<span class="w"> </span>docker
 </code></pre></div>
 
-<h2 id="ip-rule">ip rule示例</h2>
-<div class="codehilite"><pre><span></span><code>root@luzeyu-c92:~#<span class="w"> </span>ip<span class="w"> </span>-6<span class="w"> </span>rule
-<span class="m">0</span>:<span class="w">      </span>from<span class="w"> </span>all<span class="w"> </span>lookup<span class="w"> </span><span class="nb">local</span>
-<span class="m">32764</span>:<span class="w">  </span>from<span class="w"> </span>all<span class="w"> </span>lookup<span class="w"> </span>main<span class="w"> </span>suppress_prefixlength<span class="w"> </span><span class="m">0</span>
-<span class="m">32765</span>:<span class="w">  </span>not<span class="w"> </span>from<span class="w"> </span>all<span class="w"> </span>fwmark<span class="w"> </span>0xca6c<span class="w"> </span>lookup<span class="w"> </span><span class="m">51820</span>
-<span class="m">32766</span>:<span class="w">  </span>from<span class="w"> </span>all<span class="w"> </span>lookup<span class="w"> </span>main
+<h2 id="derp">搭建derp</h2>
+<div class="codehilite"><pre><span></span><code>docker<span class="w"> </span>run<span class="w"> </span>-d<span class="w"> </span>--name<span class="w"> </span>tailscale-derp<span class="w"> </span>-p<span class="w"> </span><span class="m">36666</span>:36666<span class="w"> </span>-p<span class="w"> </span><span class="m">3478</span>:3478/udp<span class="w"> </span>--restart<span class="o">=</span>always<span class="w"> </span>javaow/tailscale-derp
+<span class="c1"># a backup image</span>
+<span class="c1"># docker run --restart always --net host --name derper -d ghcr.io/yangchuansheng/ip_derper</span>
 </code></pre></div>
 
-<h3 id="32764-from-all-lookup-main-suppress_prefixlength-0">解释<code>32764:  from all lookup main suppress_prefixlength 0</code>：</h3>
-<ul>
-<li><code>32764</code>表示这条规则的优先级</li>
-<li><code>from all</code>表示对任何来源生效，即不限制来源地址</li>
-<li><code>lookup main</code>表示查询<code>main</code>路由表</li>
-<li><code>suppress_prefixlength 0</code> 表示抑制其中（目的地址）前缀为0的条目，即抑制默认路由</li>
-</ul>
-<h3 id="32765-not-from-all-fwmark-0xca6c-lookup-51820">解释<code>32765:  not from all fwmark 0xca6c lookup 51820</code>：</h3>
-<ul>
-<li><code>32765</code>表示这条规则的优先级</li>
-<li><code>not from all fwmark 0xca6c</code>表示<strong>不</strong>匹配<code>from all fwmark 0xca6c</code>的数据包，即<strong>不</strong>匹配任意来源的标记为<code>0xca6c</code>的数据包</li>
-<li><code>lookup 51280</code>表示查询<code>51280</code>路由表</li>
-</ul>
-<p>其含义为：对于防火墙标记<strong>不</strong>为<code>0xca6c</code>的流量查询51820路由表（若标记为<code>0xca6c</code>则继续尝试匹配下一个规则，即本例中的<code>32766</code>）</p>
-<p>这种做法常见于VPN等隧道软件的实现中，VPN软件修改路由表让所有流量都从VPN网卡路由，并将打包、加密后的数据包加上一个标记，以免VPN打包加密后的数据再次进入VPN网卡，形成回环。</p>
-<h2 id="wg-quick">wg-quick脚本</h2>
-<div class="codehilite"><pre><span></span><code><span class="o">[</span><span class="c1">#] wg set wg0 fwmark 51820</span>
-<span class="o">[</span><span class="c1">#] ip -4 route add 0.0.0.0/0 dev wg0 table 51820</span>
-<span class="o">[</span><span class="c1">#] ip -4 rule add not fwmark 51820 table 51820</span>
-<span class="o">[</span><span class="c1">#] ip -4 rule add table main suppress_prefixlength 0</span>
-<span class="o">[</span><span class="c1">#] sysctl -q net.ipv4.conf.all.src_valid_mark=1</span>
-<span class="o">[</span><span class="c1">#] nft -f /dev/fd/63</span>
-
-<span class="o">[</span><span class="c1">#] ip -4 rule delete table 51820</span>
-<span class="o">[</span><span class="c1">#] ip -4 rule delete table main suppress_prefixlength 0</span>
-<span class="o">[</span><span class="c1">#] nft -f /dev/fd/63</span>
+<p>如果是NAT机，需映射36666和3478端口</p>
+<h2 id="acl">控制台ACL配置</h2>
+<div class="codehilite"><pre><span></span><code><span class="w">    </span><span class="nt">&quot;derpMap&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;OmitDefaultRegions&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;Regions&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;910&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="nt">&quot;RegionID&quot;</span><span class="p">:</span><span class="w">   </span><span class="mi">910</span><span class="p">,</span>
+<span class="w">                </span><span class="nt">&quot;RegionCode&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;CN163&quot;</span><span class="p">,</span>
+<span class="w">                </span><span class="nt">&quot;Nodes&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">                    </span><span class="p">{</span>
+<span class="w">                        </span><span class="nt">&quot;Name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;BigChick-ChinaNet-IPv4&quot;</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;RegionID&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">910</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;HostName&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ddns.163.bigchick.dreamchaser-luzeyu.cn&quot;</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;InsecureForTests&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;DERPPort&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">10072</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;STUNPort&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">10003</span>
+<span class="w">                    </span><span class="p">},</span>
+<span class="w">                    </span><span class="p">{</span>
+<span class="w">                        </span><span class="nt">&quot;Name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;BigChick-ChinaNet-IPv6&quot;</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;RegionID&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">910</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;HostName&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;240e:974:eb00:908::5064:118&quot;</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;InsecureForTests&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;DERPPort&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">36666</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;STUNPort&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3478</span>
+<span class="w">                    </span><span class="p">},</span>
+<span class="w">                </span><span class="p">],</span>
+<span class="w">                </span><span class="nt">&quot;RegionName&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;CN163-BigChick&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="p">},</span>
+<span class="w">            </span><span class="nt">&quot;911&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="nt">&quot;RegionID&quot;</span><span class="p">:</span><span class="w">   </span><span class="mi">911</span><span class="p">,</span>
+<span class="w">                </span><span class="nt">&quot;RegionCode&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;CMCC&quot;</span><span class="p">,</span>
+<span class="w">                </span><span class="nt">&quot;Nodes&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">                    </span><span class="p">{</span>
+<span class="w">                        </span><span class="nt">&quot;Name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;BigChick-CMCC-IPv4&quot;</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;RegionID&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">911</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;HostName&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ddns.cmcc.bigchick.dreamchaser-luzeyu.cn&quot;</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;InsecureForTests&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;DERPPort&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">10097</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;STUNPort&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">10000</span>
+<span class="w">                    </span><span class="p">},</span>
+<span class="w">                    </span><span class="p">{</span>
+<span class="w">                        </span><span class="nt">&quot;Name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;BigChick-CMCC-IPv6&quot;</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;RegionID&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">911</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;HostName&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2409:8c60:2400:2:0:4:1:556&quot;</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;InsecureForTests&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;DERPPort&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">36666</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;STUNPort&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3478</span>
+<span class="w">                    </span><span class="p">},</span>
+<span class="w">                </span><span class="p">],</span>
+<span class="w">                </span><span class="nt">&quot;RegionName&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;CMCC-BigChick&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="p">},</span>
+<span class="w">            </span><span class="nt">&quot;912&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="nt">&quot;RegionID&quot;</span><span class="p">:</span><span class="w">   </span><span class="mi">912</span><span class="p">,</span>
+<span class="w">                </span><span class="nt">&quot;RegionCode&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;HK&quot;</span><span class="p">,</span>
+<span class="w">                </span><span class="nt">&quot;Nodes&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">                    </span><span class="p">{</span>
+<span class="w">                        </span><span class="nt">&quot;Name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;HK-Hostyun-IPv6-1&quot;</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;RegionID&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">912</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;HostName&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2a12:ab80:3:1000::124:521&quot;</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;InsecureForTests&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;DERPPort&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">36666</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;STUNPort&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3478</span>
+<span class="w">                    </span><span class="p">},</span>
+<span class="w">                    </span><span class="p">{</span>
+<span class="w">                        </span><span class="nt">&quot;Name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;HK-Hostyun-IPv6-2&quot;</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;RegionID&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">912</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;HostName&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2a12:ab80:3:1000::124:522&quot;</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;InsecureForTests&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;DERPPort&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">36666</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;STUNPort&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3478</span>
+<span class="w">                    </span><span class="p">},</span><span class="w">   </span>
+<span class="w">                    </span><span class="p">{</span>
+<span class="w">                        </span><span class="nt">&quot;Name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;HK-Hostyun-IPv6-3&quot;</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;RegionID&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">912</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;HostName&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2a12:ab80:3:1000::124:523&quot;</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;InsecureForTests&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;DERPPort&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">36666</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;STUNPort&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3478</span>
+<span class="w">                    </span><span class="p">},</span>
+<span class="w">                    </span><span class="p">{</span>
+<span class="w">                        </span><span class="nt">&quot;Name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;HK-Hostyun-IPv6-4&quot;</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;RegionID&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">912</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;HostName&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2a12:ab80:3:1000::124:524&quot;</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;InsecureForTests&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;DERPPort&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">36666</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;STUNPort&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3478</span>
+<span class="w">                    </span><span class="p">},</span>
+<span class="w">                    </span><span class="p">{</span>
+<span class="w">                        </span><span class="nt">&quot;Name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;HK-Hostyun-IPv6-5&quot;</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;RegionID&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">912</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;HostName&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2a12:ab80:3:1000::124:525&quot;</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;InsecureForTests&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;DERPPort&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">36666</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;STUNPort&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3478</span>
+<span class="w">                    </span><span class="p">},</span>
+<span class="w">                </span><span class="p">],</span>
+<span class="w">                </span><span class="nt">&quot;RegionName&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;HK-Hostyun-IPv6&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="p">},</span>
+<span class="w">            </span><span class="nt">&quot;913&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="nt">&quot;RegionID&quot;</span><span class="p">:</span><span class="w">   </span><span class="mi">913</span><span class="p">,</span>
+<span class="w">                </span><span class="nt">&quot;RegionCode&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;HK&quot;</span><span class="p">,</span>
+<span class="w">                </span><span class="nt">&quot;Nodes&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">                    </span><span class="p">{</span>
+<span class="w">                        </span><span class="nt">&quot;Name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;HK-Hostyun-IPv4&quot;</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;RegionID&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">913</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;HostName&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;203.0.113.10&quot;</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;InsecureForTests&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;DERPPort&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">36666</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;STUNPort&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3478</span>
+<span class="w">                    </span><span class="p">},</span>
+<span class="w">                    </span><span class="p">{</span>
+<span class="w">                        </span><span class="nt">&quot;Name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;HK-WePC-IPv4&quot;</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;RegionID&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">913</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;HostName&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;203.0.113.11&quot;</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;InsecureForTests&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;DERPPort&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">36666</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;STUNPort&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3478</span>
+<span class="w">                    </span><span class="p">},</span><span class="w">                    </span>
+<span class="w">                </span><span class="p">],</span>
+<span class="w">                </span><span class="nt">&quot;RegionName&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;CN-Opt&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="p">},</span><span class="w">            </span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">    </span><span class="p">},</span>
 </code></pre></div>
 
-<div class="codehilite"><pre><span></span><code><span class="o">[</span><span class="c1">#] ip link add wg0 type wireguard</span>
-<span class="o">[</span><span class="c1">#] wg setconf wg0 /dev/fd/63</span>
-<span class="o">[</span><span class="c1">#] ip -4 address add 172.16.0.2/16 dev wg0</span>
-<span class="o">[</span><span class="c1">#] ip -6 address add fdff:520::2/32 dev wg0</span>
-<span class="o">[</span><span class="c1">#] ip -6 address add 2a12:ab80:3:2000::2/52 dev wg0</span>
-<span class="o">[</span><span class="c1">#] ip link set mtu 65456 up dev wg0</span>
-<span class="o">[</span><span class="c1">#] resolvconf -a tun.wg0 -m 0 -x</span>
-<span class="o">[</span><span class="c1">#] wg set wg0 fwmark 51820</span>
-<span class="o">[</span><span class="c1">#] ip -6 route add ::/0 dev wg0 table 51820</span>
-<span class="o">[</span><span class="c1">#] ip -6 rule add not fwmark 51820 table 51820</span>
-<span class="o">[</span><span class="c1">#] ip -6 rule add table main suppress_prefixlength 0</span>
-<span class="o">[</span><span class="c1">#] nft -f /dev/fd/63</span>
-<span class="o">[</span><span class="c1">#] ip -4 route add 0.0.0.0/0 dev wg0 table 51820</span>
-<span class="o">[</span><span class="c1">#] ip -4 rule add not fwmark 51820 table 51820</span>
-<span class="o">[</span><span class="c1">#] ip -4 rule add table main suppress_prefixlength 0</span>
-<span class="o">[</span><span class="c1">#] sysctl -q net.ipv4.conf.all.src_valid_mark=1</span>
-<span class="o">[</span><span class="c1">#] nft -f /dev/fd/63</span>
-<span class="o">[</span><span class="c1">#] iptables -A FORWARD -i enp1s0 -j ACCEPT; iptables -A FORWARD -o enp1s0 -j ACCEPT; iptables -t nat -A POSTROUTING -o wg0 -j MASQUERADE; ip6tables -A FORWARD -i wg0 -o enp1s0 -j ACCEPT; ip6tables -A FORWARD -i enp1s0 -o wg0 -j ACCEPT</span>
+<h1 id="_1">路由流量</h1>
+<h2 id="_2">声明路由</h2>
+<div class="codehilite"><pre><span></span><code>curl<span class="w"> </span>-fsSL<span class="w"> </span>https://tailscale.com/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
 
-<span class="o">[</span><span class="c1">#] ip -4 rule delete table 51820</span>
-<span class="o">[</span><span class="c1">#] ip -4 rule delete table 51820</span>
-<span class="o">[</span><span class="c1">#] ip -4 rule delete table main suppress_prefixlength 0</span>
-<span class="o">[</span><span class="c1">#] ip -4 rule delete table main suppress_prefixlength 0</span>
-<span class="o">[</span><span class="c1">#] ip -6 rule delete table 51820</span>
-<span class="o">[</span><span class="c1">#] ip -6 rule delete table main suppress_prefixlength 0</span>
-<span class="o">[</span><span class="c1">#] ip link delete dev wg0</span>
-<span class="o">[</span><span class="c1">#] resolvconf -d tun.wg0 -f</span>
-<span class="o">[</span><span class="c1">#] nft -f /dev/fd/63</span>
-<span class="o">[</span><span class="c1">#] iptables -D FORWARD -i enp1s0 -j ACCEPT; iptables -D FORWARD -o enp1s0 -j ACCEPT; iptables -t nat -D POSTROUTING -o wg0 -j MASQUERADE; ip6tables -D FORWARD -i wg0 -o enp1s0 -j ACCEPT; ip6tables -D FORWARD -i enp1s0 -o wg0 -j ACCEPT</span>
+<span class="nb">cd</span><span class="w"> </span>/tmp
+mkdir<span class="w"> </span>ts_routes
+<span class="nb">cd</span><span class="w"> </span>ts_routes
+<span class="c1"># 电信、联通IP</span>
+wget<span class="w"> </span>https://gaoyifan.github.io/china-operator-ip/chinanet.txt
+wget<span class="w"> </span>https://gaoyifan.github.io/china-operator-ip/chinanet6.txt
+wget<span class="w"> </span>https://gaoyifan.github.io/china-operator-ip/drpeng.txt
+wget<span class="w"> </span>https://gaoyifan.github.io/china-operator-ip/drpeng6.txt
+wget<span class="w"> </span>https://gaoyifan.github.io/china-operator-ip/unicom.txt
+wget<span class="w"> </span>https://gaoyifan.github.io/china-operator-ip/unicom6.txt
+wget<span class="w"> </span>https://gaoyifan.github.io/china-operator-ip/tietong.txt
+wget<span class="w"> </span>https://gaoyifan.github.io/china-operator-ip/tietong6.txt
+<span class="c1"># 移动IP</span>
+wget<span class="w"> </span>https://gaoyifan.github.io/china-operator-ip/cmcc.txt
+wget<span class="w"> </span>https://gaoyifan.github.io/china-operator-ip/cmcc6.txt
+<span class="c1"># CERNET</span>
+wget<span class="w"> </span>https://gaoyifan.github.io/china-operator-ip/cernet.txt
+wget<span class="w"> </span>https://gaoyifan.github.io/china-operator-ip/cernet6.txt
+<span class="c1"># Global IP</span>
+wget<span class="w"> </span>https://github.com/Loyalsoldier/geoip/raw/release/text/cloudflare.txt
+wget<span class="w"> </span>https://github.com/Loyalsoldier/geoip/raw/release/text/cloudfront.txt
+wget<span class="w"> </span>https://github.com/Loyalsoldier/geoip/raw/release/text/google.txt
+wget<span class="w"> </span>https://gaoyifan.github.io/china-operator-ip/googlecn.txt
+wget<span class="w"> </span>https://gaoyifan.github.io/china-operator-ip/googlecn6.txt
+wget<span class="w"> </span>https://github.com/Loyalsoldier/geoip/raw/release/text/telegram.txt
+wget<span class="w"> </span>https://github.com/Loyalsoldier/geoip/raw/release/text/twitter.txt
+wget<span class="w"> </span>https://github.com/Loyalsoldier/geoip/raw/release/text/fastly.txt
+wget<span class="w"> </span>https://github.com/Loyalsoldier/geoip/raw/release/text/facebook.txt
+wget<span class="w"> </span>https://app.dreamchaser-luzeyu.cn/caalist/d/StaticFiles/github_cidr.txt
+wget<span class="w"> </span>https://app.dreamchaser-luzeyu.cn/caalist/d/StaticFiles/wikimedia_cidr.txt
+wget<span class="w"> </span>https://app.dreamchaser-luzeyu.cn/caalist/d/StaticFiles/pixiv_cidr.txt
+wget<span class="w"> </span>https://app.dreamchaser-luzeyu.cn/caalist/d/StaticFiles/vercel_cidr.txt
+<span class="c1"># US &amp; JP</span>
+wget<span class="w"> </span>https://github.com/Loyalsoldier/geoip/raw/release/text/us.txt
+wget<span class="w"> </span>https://github.com/Loyalsoldier/geoip/raw/release/text/jp.txt
+<span class="c1"># Global DNS</span>
+cat<span class="w"> </span>&gt;<span class="w"> </span>./dns.txt<span class="w"> </span><span class="s">&lt;&lt; EOF</span>
+<span class="s">203.0.113.12/32</span>
+<span class="s">203.0.113.13/32</span>
+<span class="s">203.0.113.14/32</span>
+<span class="s">203.0.113.15/32</span>
+<span class="s">2001:4860:4860::8888/128</span>
+<span class="s">2001:4860:4860::8844/128</span>
+<span class="s">203.0.113.16/32</span>
+<span class="s">EOF</span>
+<span class="c1"># Netflix IP</span>
+wget<span class="w"> </span>https://github.com/Loyalsoldier/geoip/raw/release/text/netflix.txt
+
+<span class="c1"># 合并要转发的IP</span>
+rm<span class="w"> </span>./routed.txt
+cat<span class="w"> </span>./*.txt<span class="w"> </span>&gt;<span class="w"> </span>./routed.txt
+tailscale<span class="w"> </span><span class="nb">set</span><span class="w"> </span>--advertise-routes<span class="w"> </span><span class="k">$(</span>cat<span class="w"> </span>./routed.txt<span class="w"> </span><span class="p">|</span><span class="w"> </span>tr<span class="w"> </span><span class="s2">&quot;\n&quot;</span><span class="w"> </span><span class="s2">&quot;,&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>sed<span class="w"> </span><span class="s2">&quot;s/,</span>$<span class="s2">//g&quot;</span><span class="k">)</span>
+
+<span class="c1"># 禁止路由netflix ipv6</span>
+cat<span class="w"> </span>netflix.txt<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s2">&quot;:&quot;</span><span class="w"> </span>&gt;<span class="w"> </span>netflix6.txt
+ip6tables<span class="w"> </span>--flush
+sed<span class="w"> </span>-i<span class="w"> </span><span class="s1">&#39;s/^/ip6tables -I FORWARD -d /g&#39;</span><span class="w"> </span>./netflix6.txt
+sed<span class="w"> </span>-i<span class="w"> </span><span class="s1">&#39;s/$/ -j REJECT/g&#39;</span><span class="w"> </span>./netflix6.txt
+cat<span class="w"> </span>./netflix6.txt<span class="w"> </span><span class="p">|</span><span class="w"> </span>sed<span class="w"> </span><span class="s2">&quot;s/FORWARD/OUTPUT/g&quot;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>netflix6.txt
+mv<span class="w"> </span>./netflix6.txt<span class="w"> </span>./reject_nf6.sh
+bash<span class="w"> </span>./reject_nf6.sh
+</code></pre></div>
+
+<h2 id="_3">开启转发</h2>
+<div class="codehilite"><pre><span></span><code>sed<span class="w"> </span>-i<span class="w"> </span><span class="s2">&quot;s/#net.ipv4.ip_forward=1/net.ipv4.ip_forward=1/g&quot;</span><span class="w"> </span>/etc/sysctl.conf
+sed<span class="w"> </span>-i<span class="w"> </span><span class="s2">&quot;s/#net.ipv6.conf.all.forwarding=1/net.ipv6.conf.all.forwarding=1/g&quot;</span><span class="w"> </span>/etc/sysctl.conf
+sysctl<span class="w"> </span>-p
+
+<span class="c1"># --- 让来自其他机器的流量走tun接口</span>
+ip<span class="w"> </span>route<span class="w"> </span>add<span class="w"> </span>default<span class="w"> </span>dev<span class="w"> </span>tun_if<span class="w"> </span>table<span class="w"> </span><span class="m">90</span>
+ip<span class="w"> </span>-6<span class="w"> </span>route<span class="w"> </span>add<span class="w"> </span>default<span class="w"> </span>dev<span class="w"> </span>tun_if<span class="w"> </span>table<span class="w"> </span><span class="m">90</span>
+ip<span class="w"> </span>rule<span class="w"> </span>add<span class="w"> </span>from<span class="w"> </span><span class="m">100</span>.64.0.0/10<span class="w"> </span>table<span class="w"> </span><span class="m">90</span>
+ip<span class="w"> </span>-6<span class="w"> </span>rule<span class="w"> </span>add<span class="w"> </span>from<span class="w"> </span>fd7a:115c:a1e0::/48<span class="w"> </span>table<span class="w"> </span><span class="m">90</span>
 </code></pre></div>

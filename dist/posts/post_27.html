@@ -1,72 +1,15 @@
-<h1 id="vncchromium">VNC运行Chromium</h1>
-<p>在SSH中运行</p>
-<div class="codehilite"><pre><span></span><code>rm<span class="w"> </span>-rf<span class="w"> </span>~/.vnc
-
-<span class="c1"># Note: Use tigervnc to workaround xdotool issues</span>
-apt<span class="w"> </span>install<span class="w"> </span>tigervnc-common<span class="w"> </span>tigervnc-standalone-server<span class="w"> </span>xfce4<span class="w"> </span>-y
-apt<span class="w"> </span>install<span class="w"> </span>chromium<span class="w"> </span>fonts-wqy-zenhei<span class="w"> </span>fonts-wqy-microhei<span class="w"> </span>-y
-apt<span class="w"> </span>install<span class="w"> </span>xdotool<span class="w"> </span>-y
-apt<span class="w"> </span>install<span class="w"> </span>psmisc<span class="w"> </span>-y<span class="w"> </span><span class="c1"># killall command</span>
-
-cat<span class="w"> </span>&gt;<span class="w"> </span>~/.Xresources<span class="w"> </span><span class="s">&lt;&lt; EOF</span>
-<span class="s">*.background: gray75</span>
-<span class="s">EOF</span>
-
-mkdir<span class="w"> </span>~/.vnc
-touch<span class="w"> </span>~/.vnc/xstartup
-<span class="c1"># Note: Not a full desktop environment, just a simple xfce4 session</span>
-cat<span class="w"> </span>&gt;<span class="w"> </span>~/.vnc/xstartup<span class="w"> </span><span class="s">&lt;&lt; EOF</span>
-<span class="s">#!/bin/sh</span>
-<span class="s">#/etc/X11/Xresources/x11-common</span>
-<span class="s">xrdb $HOME/.Xresources</span>
-<span class="s">startxfce4</span>
-<span class="s">EOF</span>
-chmod<span class="w"> </span><span class="m">777</span><span class="w"> </span>~/.vnc/xstartup
-
-vncpasswd
-vncserver<span class="w"> </span>-geometry<span class="w"> </span>800x600
+<h1 id="dockeripv6">给docker容器分配ipv6地址</h1>
+<p>还是用内网ipv6吧</p>
+<p><code>/etc/docker/daemon.json</code></p>
+<div class="codehilite"><pre><span></span><code>{
+  &quot;ipv6&quot;: true,
+  &quot;fixed-cidr-v6&quot;: &quot;fd00:cafe::/64&quot;,
+  &quot;ip6tables&quot;: true
+}
 </code></pre></div>
 
-<p>然后可连接VNC 5901端口</p>
-<div class="codehilite"><pre><span></span><code><span class="c1">#/bin/bash</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">DISPLAY</span><span class="o">=</span>:1.0
-<span class="c1"># Open terminal</span>
-xdotool<span class="w"> </span>key<span class="w"> </span>ctrl+alt+t
-xdotool<span class="w"> </span>search<span class="w"> </span>--sync<span class="w"> </span>termit
-<span class="c1"># Run chromium &amp; access itdog.cn</span>
-xdotool<span class="w"> </span><span class="nb">type</span><span class="w"> </span><span class="s2">&quot;chromium --no-sandbox&quot;</span>
-xdotool<span class="w"> </span>key<span class="w"> </span>Return
-xdotool<span class="w"> </span>search<span class="w"> </span>--sync<span class="w"> </span>chromium
-sleep<span class="w"> </span><span class="m">1</span>
-xdotool<span class="w"> </span><span class="nb">type</span><span class="w"> </span><span class="s2">&quot;www.itdog.cn/ping/&quot;</span>
-xdotool<span class="w"> </span>key<span class="w"> </span>Return
-<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Waiting for webpage loads...&quot;</span>
-sleep<span class="w"> </span><span class="m">5</span>
-
-<span class="c1"># Input IP &amp; Click button</span>
-xdotool<span class="w"> </span>mousemove<span class="w"> </span><span class="m">310</span><span class="w"> </span><span class="m">470</span><span class="w"> </span>click<span class="w"> </span><span class="m">1</span>
-xdotool<span class="w"> </span><span class="nb">type</span><span class="w"> </span><span class="s2">&quot;203.0.113.35&quot;</span>
-xdotool<span class="w"> </span>mousemove<span class="w"> </span><span class="m">687</span><span class="w"> </span><span class="m">470</span><span class="w"> </span>click<span class="w"> </span><span class="m">1</span>
-<span class="c1"># Wait 120 seconds</span>
-<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Waiting for result...&quot;</span>
-sleep<span class="w"> </span><span class="m">10</span>
-
-<span class="c1"># Select text &amp; save</span>
-xdotool<span class="w"> </span>key<span class="w"> </span>ctrl+a
-sleep<span class="w"> </span><span class="m">0</span>.5
-xdotool<span class="w"> </span>key<span class="w"> </span>ctrl+c
-sleep<span class="w"> </span><span class="m">0</span>.5
-xclip<span class="w"> </span>-o
-xclip<span class="w"> </span>-o<span class="w"> </span>&gt;<span class="w"> </span>~/result.log
-<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;no result&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>xclip<span class="w"> </span>-i
-<span class="c1"># Quit chromium</span>
-xdotool<span class="w"> </span>key<span class="w"> </span>alt+F4
-sleep<span class="w"> </span><span class="m">0</span>.5
-xdotool<span class="w"> </span>key<span class="w"> </span>alt+F4
+<div class="codehilite"><pre><span></span><code>sudo<span class="w"> </span>sysctl<span class="w"> </span>-w<span class="w"> </span>net.ipv6.conf.all.forwarding<span class="o">=</span><span class="m">1</span>
+sudo<span class="w"> </span>ip6tables<span class="w"> </span>-t<span class="w"> </span>nat<span class="w"> </span>-A<span class="w"> </span>POSTROUTING<span class="w"> </span>-s<span class="w"> </span>fd00:cafe::/64<span class="w"> </span>-o<span class="w"> </span>eth0<span class="w"> </span>-j<span class="w"> </span>MASQUERADE
 </code></pre></div>
 
-<p>在VNC中运行</p>
-<div class="codehilite"><pre><span></span><code>chromium<span class="w"> </span>--no-sandbox
-</code></pre></div>
-
-<p>修改默认字体和默认缩放（67%）</p>
+<p>之后正常创建容器即可</p>

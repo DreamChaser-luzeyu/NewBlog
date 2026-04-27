@@ -4,6 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>我的个人博客 - 桌面版</title>
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            svg: {
+                fontCache: 'global'
+            }
+        };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -65,7 +77,7 @@
              :style="folder.style" 
              @mousedown="handleDrag($event, folder, 'folder')">
             <div class="webde-window-titlebar">
-                <span class="window-title">{{ folder.name }}</span>
+                <span class="window-title" :title="folder.name">{{ getWindowTitle(folder.name, folder.style.width) }}</span>
                 <div class="window-controls">
                     <div class="material-icons window-ctrl-btn maxmin-btn minimize-icon" @click.stop="minimizeWindow(folder, 'folder')">remove</div>
                     <div class="material-icons window-ctrl-btn maxmin-btn" @click.stop="maximizeWindow(folder, 'folder')">{{ folder.maximized ? 'filter_none' : 'crop_square' }}</div>
@@ -108,7 +120,7 @@
              :style="win.style" 
              @mousedown="handleDrag($event, win, 'article')">
             <div class="webde-window-titlebar">
-                <span class="window-title">{{ win.title }}</span>
+                <span class="window-title" :title="win.title">{{ getWindowTitle(win.title, win.style.width) }}</span>
                 <div class="window-controls">
                     <div class="material-icons window-ctrl-btn maxmin-btn minimize-icon" @click.stop="minimizeWindow(win, 'article')">remove</div>
                     <div class="material-icons window-ctrl-btn maxmin-btn" @click.stop="maximizeWindow(win, 'article')">{{ win.maximized ? 'filter_none' : 'crop_square' }}</div>

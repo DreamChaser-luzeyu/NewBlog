@@ -1,169 +1,158 @@
-<p>本文档由 AI 总结，可能有错误。</p>
-<p>这篇论文研究的是：当芯片越来越复杂时，只靠软件去跑 Verilog 仿真会非常慢，动不动就要跑很多天，严重拖慢开发和验证。作者想解决的是，怎样在尽量不牺牲调试能力和精度的前提下，用 FPGA 把周期精确硬件模型加速起来，并进一步把它接进混合仿真平台里，让大规模 SoC 级联调也能更快完成。论文的做法是：把 Verilog 电路自动转换成适合 FPGA 加速和精确控制的模型，自动生成接口，再分别接入基于 Zynq 和基于 QEMU 的混合仿真平台，最后通过 FFT 和系统级实验验证其正确性与加速效果。</p>
-<h2 id="_1">论文信息</h2>
-<ul>
-<li>标题：混合仿真平台中周期精确硬件模型 FPGA 加速实现</li>
-<li>作者：郑宇辰</li>
-<li>类型：硕士论文</li>
-<li>学校：哈尔滨工业大学</li>
-<li>时间：2023 年 5 月</li>
-</ul>
-<h2 id="_2">研究问题</h2>
-<p>论文要解决三个直接痛点：</p>
-<ol>
-<li>RTL/Verilog 的软件仿真速度太慢，难以支撑大规模验证。</li>
-<li>传统 FPGA 原型虽然快，但调试和周期级控制能力不足。</li>
-<li>单纯的软件仿真或硬件仿真都不够灵活，系统级 SoC 验证需要混合方案。</li>
-</ol>
-<p>作者核心关注的是：如何构建一种既能在 FPGA 上高速执行、又能按周期精确控制、还能方便和软件仿真模型协作的硬件仿真模型。</p>
-<h2 id="_3">背景与动机</h2>
-<p>论文把现有仿真技术分成三类：</p>
-<ul>
-<li>指令级仿真</li>
-<li>事务级仿真</li>
-<li>周期精确级仿真</li>
-</ul>
-<p>其中周期精确仿真最细、最准，但也是最慢的。作者认为，真正需要被加速的是这类高精度模型；同时又希望保留软件平台的灵活性，所以最终目标不是单纯做一个 FPGA 加速器，而是做一个可进入混合仿真平台的周期精确硬件模型。</p>
-<h2 id="_4">主要方法</h2>
-<h3 id="1-verilog">1. 将 Verilog 电路自动转换为周期精确硬件模型</h3>
-<p>论文借鉴 LI-BDN（Latency-Insensitive Bounded Dataflow Networks）思想，把普通同步时序电路变换成更适合受控执行的形式，使电路在 FPGA 上运行时仍能按周期级别进行驱动、暂停和观测。</p>
-<p>作者在 Yosys 中新增 Pass，直接修改 RTLIL 中间表示，完成：</p>
-<ul>
-<li>电路 LI-BDN 化</li>
-<li>周期精确硬件模型自动生成</li>
-<li>对应硬件接口自动生成</li>
-</ul>
-<p>这意味着，用户不需要手工重写大量 RTL，就能把原始 Verilog 变成可用于仿真加速的模型。</p>
-<h3 id="2">2. 设计硬件接口与软件接口</h3>
-<p>为了让硬件模型能接入更大的仿真系统，作者设计了两层接口：</p>
-<ul>
-<li>硬件侧接口：负责控制模型运行、输入激励、提取信号</li>
-<li>软件侧接口：向上层仿真程序提供 API，便于测试程序和软件模型调用</li>
-</ul>
-<p>这样，硬件模型不再只是“能跑”，而是变成“能被系统化驱动和联调”的部件。</p>
-<h3 id="3">3. 实现两种混合仿真平台</h3>
-<p>论文实现了两种代表性平台：</p>
-<h4 id="zynq">基于 Zynq 的嵌入式混合仿真平台</h4>
-<p>重点是：</p>
-<ul>
-<li>利用 Zynq 的软硬件协同特点</li>
-<li>通过 AXI 等机制完成软硬件通信</li>
-<li>设计适合扩展的软件 API 和软件激励方案</li>
-</ul>
-<h4 id="qemu">基于 QEMU 的混合仿真平台</h4>
-<p>在已有 Zynq 平台基础上继续扩展：</p>
-<ul>
-<li>把 QEMU 软件模拟器接入系统</li>
-<li>在 Zynq 端增加与 QEMU 通信的模块</li>
-<li>完成事务级信号与周期级/引脚级信号之间的转换</li>
-</ul>
-<p>这样就能在更真实的系统上下文里做验证，例如让软件栈通过 QEMU 访问 FPGA 中加速的硬件外设模型。</p>
-<h2 id="_5">实验与结果</h2>
-<p>论文主要从三个层面验证方法有效性：</p>
-<h3 id="1">1. 自动化生成正确性</h3>
-<p>作者用开源 FFT IP 核测试自动化流程，对比：</p>
-<ul>
-<li>编译器处理前后的电路结构</li>
-<li>关键波形</li>
-</ul>
-<p>结果表明，自动生成的周期精确硬件模型保持了原始设计语义，功能正确。</p>
-<h3 id="2_1">2. 仿真加速能力</h3>
-<p>在实现软件激励后，论文评估了基于 FPGA 的硬件加速效果。结论是：</p>
-<ul>
-<li>周期精确模型可以在保持较好调试能力的前提下显著提高运行效率</li>
-<li>对大规模电路验证更有价值</li>
-</ul>
-<h3 id="3_1">3. 混合仿真平台有效性</h3>
-<p>作者分别验证了：</p>
-<ul>
-<li>基于 Zynq 的嵌入式混合仿真平台</li>
-<li>基于 QEMU 的系统级混合仿真平台</li>
-</ul>
-<p>其中通过 QEMU 中的软件模型访问 APB 3.0 SRAM 电路，证明整个系统级链路能够正常工作。</p>
-<h2 id="_6">论文结论</h2>
-<p>论文最终完成了四项关键成果：</p>
-<ol>
-<li>在 Yosys 中实现周期精确硬件模型自动生成流程。</li>
-<li>实现基于 Zynq 的嵌入式混合仿真平台。</li>
-<li>实现基于 QEMU 的混合仿真平台。</li>
-<li>用 FFT 与系统级访问实验验证了自动化流程、仿真加速能力与平台正确性。</li>
-</ol>
-<p>作者同时指出了后续改进方向：</p>
-<ul>
-<li>目前 LI-BDN 化主要针对顶层模块，未来可扩展到更多层级</li>
-<li>硬件接口仍有进一步提速空间</li>
-<li>Zynq 与主机之间目前使用以太网通信，未来可升级为 PCIe 等更高速链路</li>
-</ul>
-<h2 id="_7">我的理解</h2>
-<p>这篇论文的价值不只是“把仿真跑快一点”，而是把“可调试的周期精确硬件模型”“自动化编译工具链”“混合仿真平台”三件事连起来了。它很适合以下场景：</p>
-<ul>
-<li>芯片外设或 IP 核验证</li>
-<li>SoC 软硬件协同联调</li>
-<li>软件栈尚未完善时的系统级原型验证</li>
-<li>需要兼顾精度、速度、成本的研究型平台</li>
-</ul>
-<p>从工程视角看，这项工作的重点不是追求商业仿真器那种极致能力，而是在开源工具链和较低成本 FPGA 条件下，做出可落地、可扩展、可复现的方案。</p>
-<h2 id="_8">论文原页图像（逐页保留，含全部图表）</h2>
-<p><img alt="第1页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-01.png" />
-<img alt="第2页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-02.png" />
-<img alt="第3页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-03.png" />
-<img alt="第4页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-04.png" />
-<img alt="第5页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-05.png" />
-<img alt="第6页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-06.png" />
-<img alt="第7页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-07.png" />
-<img alt="第8页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-08.png" />
-<img alt="第9页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-09.png" />
-<img alt="第10页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-10.png" />
-<img alt="第11页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-11.png" />
-<img alt="第12页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-12.png" />
-<img alt="第13页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-13.png" />
-<img alt="第14页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-14.png" />
-<img alt="第15页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-15.png" />
-<img alt="第16页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-16.png" />
-<img alt="第17页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-17.png" />
-<img alt="第18页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-18.png" />
-<img alt="第19页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-19.png" />
-<img alt="第20页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-20.png" />
-<img alt="第21页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-21.png" />
-<img alt="第22页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-22.png" />
-<img alt="第23页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-23.png" />
-<img alt="第24页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-24.png" />
-<img alt="第25页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-25.png" />
-<img alt="第26页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-26.png" />
-<img alt="第27页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-27.png" />
-<img alt="第28页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-28.png" />
-<img alt="第29页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-29.png" />
-<img alt="第30页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-30.png" />
-<img alt="第31页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-31.png" />
-<img alt="第32页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-32.png" />
-<img alt="第33页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-33.png" />
-<img alt="第34页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-34.png" />
-<img alt="第35页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-35.png" />
-<img alt="第36页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-36.png" />
-<img alt="第37页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-37.png" />
-<img alt="第38页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-38.png" />
-<img alt="第39页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-39.png" />
-<img alt="第40页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-40.png" />
-<img alt="第41页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-41.png" />
-<img alt="第42页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-42.png" />
-<img alt="第43页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-43.png" />
-<img alt="第44页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-44.png" />
-<img alt="第45页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-45.png" />
-<img alt="第46页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-46.png" />
-<img alt="第47页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-47.png" />
-<img alt="第48页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-48.png" />
-<img alt="第49页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-49.png" />
-<img alt="第50页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-50.png" />
-<img alt="第51页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-51.png" />
-<img alt="第52页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-52.png" />
-<img alt="第53页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-53.png" />
-<img alt="第54页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-54.png" />
-<img alt="第55页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-55.png" />
-<img alt="第56页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-56.png" />
-<img alt="第57页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-57.png" />
-<img alt="第58页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-58.png" />
-<img alt="第59页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-59.png" />
-<img alt="第60页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-60.png" />
-<img alt="第61页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-61.png" />
-<img alt="第62页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-62.png" />
-<img alt="第63页" src="posts/论文阅读/pages/混合仿真平台中周期精确硬件模型FPGA加速实现_郑宇辰/page-63.png" /></p>
+<h1 id="abstract">Abstract</h1>
+<p>Superscalar architecture is becoming the norm in today's high performance microprocessor design. However, achievable instruction level parallelism in programs limits the scalability of such architectures. In this paper, we introduce the Multiple Context Multithreaded Superscalar Processor (MCMS), which is an extension of conventional superscalar processor architecture to support multithreading. This is motivated by the enormous potential instruction level parallelism present in multithreaded programs. A hardware implementation of multithreaded constructs is also proposed. Results from trace-driven simulation show that with the MCMS, instruction level parallelism is indeed increased signi®cantly. A MCMS processor with four hardware contexts can produce a speedup of up to 2.5 times over superscalar processor with similar hardware resources. We found that the primary limitation shifts from data dependencies in the superscalar processor to resource contentions in MCMS. $^ { © }$ 2000 Elsevier Science B.V. All rights reserved.</p>
+<p>Keywords: Superscalar processor; Multithreading; Multiple context; Simulation; Instruction level parallelism</p>
+<h1 id="1-introduction">1. Introduction</h1>
+<p>With advancements in semiconductor technology, we can pack more and more transistors into a processor. This allows more sophisticated tech-</p>
+<p>niques such as multiple issue, out-of-order issue, speculative execution and register renaming to be implemented in hardware. In addition, multiple execution units and larger on-chip caches are now possible.</p>
+<p>Most of the current high performance microprocessors make use of the above superscalar (SS) techniques. Superscalar architecture enables multiple instructions to be fetched, decoded and</p>
+<p>executed concurrently in one cycle. In simple words, it widens the processor's execution pipeline. A wider pipeline can increase the instruction throughput. However, we have to extract enough instruction level parallelism from the programs to fully utilise the wider execution pipeline.</p>
+<p>Dierent methods of increasing the instruction level parallelism have been explored. Both hardware and software techniques have been used. Hardware techniques include speculative execution, register renaming and out-of-order issue with instructions lookahead. Software techniques are usually incorporated into the compilers as optimisations. The instructions in a program are usually rearranged in hope to increase instruction level parallelism. Some of the common approaches are trace scheduling, loop unrolling, software pipelining, optimal register allocation algorithms and static branch prediction.</p>
+<p>In this paper, we will investigate the feasibility of increasing instruction level parallelism using multithreading to better exploit the resources of a superscalar processor. As a programming paradigm, multithreaded programming is now supported at the kernel level by nearly every modern operating system. Instructions from dierent execution threads of a multithreaded application are largely independent. This can be exploited to increase the instruction level parallelism if instructions from multiple threads are allowed to be executed concurrently. Allowing this will require the processor to support multiple contexts. With this motivation, we introduce Multiple Context Multithreaded Superscalar (MCMS) processor architecture. The implementation of a hardware mechanism for ecient execution of multithreaded constructs is also proposed.</p>
+<p>Section 2 describes some of the current work done on hardware-supported multithreading at the processor level. This will set a background to the work we have done. The design of the MCMS architecture and some implementation details will</p>
+<p>be described in Section 3. The simulation technique used in our study will be brie¯y described in Section 4. Section 5 will presents the simulation results obtained together with some discussions. Finally, Section 6 draws the conclusion and summarises our ®ndings.</p>
+<h1 id="2-multithreading-at-the-processor-level">2. Multithreading at the processor level</h1>
+<p>Multithreading has been implemented in multiprocessor systems for two primary reasons. First it gives the programmer a ``lightweight'' mechanism to work with shared memory multiprocessors directly. Second, it is a mean of hiding the long latencies such as remote memory access [3]. The latencies range from tens to hundreds of processor cycles. Two common scheduling methods are the blocked and interleaved schemes. In the blocked scheme, a context switch occurs when a thread encounters a long latency operation. The interleaved scheme switches between contexts on a cycle-by-cycle basis. Each context takes turn to issue instructions. Some examples are APRIL [1], HEP [7], MASA [13] and TERA [2].</p>
+<p>The blocked scheme does not help to reduce pipeline stall because it does not exploit the parallelism from multiple threads. The interleaved scheme can exploit the parallelism but there must be enough threads to fully utilise the pipeline. Most of the implementations have a strict interleaving scheme where a thread cannot be skipped even if it has no instruction to issue. Usually memory tags are used to enforce thread synchronisation in these multiprocessors.</p>
+<p>Hirata et al. [8] proposed a multithreaded architecture to improve parallel instructions issue. Every thread has its own instruction decoder and instruction queue. Every thread may issue 1 instruction in each cycle. Simulation of a highly parallel ray-tracing program produced speedups of 3.72 and 5.79 for processors with four and eight</p>
+<p>threads, respectively, relative to a single threaded processor. All cache accesses were assumed to be hits. Therefore, inter thread cache thrashing was not accounted for.</p>
+<p>Simultaneous multithreading [17] was proposed to maximise the instruction issue slots of a superscalar processor. It exploits the instruction level parallelism obtained from several independent threads of execution. Both vertical and horizontal wastes of the instruction issue slots are minimised by allowing instructions from multiple threads to be issued in each cycle. In Ref. [18], Tullsen et al. showed that simultaneous multithreading can be made possible without adding undue complexity to a conventional superscalar processor design. We have adopted some of their approaches in MCMS but it diers from SMT in the details of the implementation, especially in the synchronisation mechanism.</p>
+<p>Lo et al. [10] has reported almost similar speedups in SMT. They use a processor con®guration with huge amount of resources; a 4 ported data cache, 4 ALU units and 4 ¯oating point units. Due to these assumptions, they have missed to identify the occurrence of resource contention. Tullsen et al. [18] found that the limiting factor in SMT is the fetch throughput.</p>
+<p>Hily and Seznec [9] investigate the contention on second level cache in SMT. They prove that ignoring second level cache contention may lead to over-estimating the performance of SMT. They also show that memory constraints may limits the number of threads. Their simulations assume perfect branch prediction and in®nite number of single cycle functional units.</p>
+<p>Another similar work is the performance study of multithreaded superscalar processor done by Gulati and Bagherzadeh [6]. They simulated a processor con®guration with limited resources and reported a speedup of $20 \mathrm { - } 5 5 \%$ across a wide range of benchmarks. The data cache was only $8 \mathrm { ~ K ~ }$ in size and was single ported. Moreover, the register</p>
+<p>®le of size 128 is shared among all the executing thread. Therefore, resource contentions and memory requirements could seriously limit any performance gain.</p>
+<p>Most of these works have left out the implementation of thread synchronisation mechanism even though they do mention that ecient synchronisation is possible. Also, the number of software threads used is always equal to or less than the number of contexts of the processor architecture. In reality, the number of software threads may grow to exceed the number of supported hardware contexts.</p>
+<p>The simulations performed on SMT and by Gulati used dierent numbers of software threads to test the eect of varying number of concurrent executing threads. We feel that the comparison is not very fair. Even if the same programs with the same data sets are used, the behaviour will still be dierent because the work is partitioned dierently. For example, the memory requirement for a program that is partitioned into two threads is de®nitely dierent from partitioning the same program using four or eight threads. We hope to address these and other issues with our work.</p>
+<h1 id="3-mcms-architecture">3. MCMS architecture</h1>
+<p>We will use a generic conventional superscalar processor architecture as the basis for our MCMS architecture. Extensions will be made to provide support for multiple contexts and multithreading. We wanted to make minimal extensions and so reduce any added complexity whenever possible. Fig. 1 shows the organisation of the MCMS architecture.</p>
+<h1 id="31-multiple-context">3.1. Multiple context</h1>
+<p>Multiple contexts are required to allow instructions for dierent threads to co-exist and</p>
+<p><img alt="" src="posts/论文阅读/mineru_assets/Loh和Wong - 2000 - Multiple context multithreaded superscalar processor architecture/images/02c8423f82a405fbabc93eb6e9ba44106f6dbb1c01a77ade903867e2aa6c8e72.jpg" />
+Fig. 1. Organisation of MCMS architecture.</p>
+<p>execute concurrently in the processor. In order to support multiple contexts, we have to ®rst replicate the resources that are context dependent. These include the PSR, PC and register ®les. In today's superscalar processors, these account for about $5- 1 0 \%$ of the overall die area. Every instructions fetched must also be augmented with a context id so that we can identify which thread an instruction is from. The context id is used to determine which PC to change when there is a change in control ¯ow and which register ®le to access and update.</p>
+<p>Each context needs to keep some status information. We will augment them into the PSR. They are listed and described in Table 1. These ¯ags are useful in guiding the instruction fetch scheduling.</p>
+<p>In order not to complicate the instruction fetch logic, we restricted the MCMS to fetch instructions from only one thread in a cycle. If we allow instructions from several threads to be fetched in the same cycle from a single instruction cache, the</p>
+<p>instruction cache will have to be made multi-ported. Furthermore, a lockup-free instruction cache is required in MCMS. A thread that caused an instruction cache miss will have to wait until the cache miss has been re®lled. However, other threads that do not face an instruction cache miss</p>
+<p>Table 1 Context status information in PSR</p>
+<table><tr><td>PSR flags</td><td>Status</td><td>Description</td></tr><tr><td rowspan="2">Free context</td><td>Set</td><td>The context is free</td></tr><tr><td>Reset</td><td>The context is used</td></tr><tr><td rowspan="2">I-cache miss</td><td>Set</td><td>Instruction cache miss</td></tr><tr><td>Reset</td><td>No instruction cache miss</td></tr><tr><td rowspan="2">Suspend</td><td>Set</td><td>Instruction fetch is suspended due to mutex lock or synchronisation</td></tr><tr><td>Reset</td><td>Instruction fetch is not suspended</td></tr><tr><td rowspan="2">Speculation</td><td>Set</td><td>Instruction fetch is on speculation due to branch prediction</td></tr><tr><td>Reset</td><td>Not on speculation</td></tr></table>
+
+<p>should be allowed to continue fetching instructions from the instruction cache. A lockup-free instruction cache will not delay the instruction fetch of a thread if another thread has caused an instruction cache miss.</p>
+<p>Unlike a superscalar processor, which has only 1 PC, the MCMS has multiple PCs. Therefore, we need a scheduling mechanism to select a thread to fetch from in each cycle. We used the context status to assist the scheduling. Only occupied contexts are included in the selection and contexts with I-cache miss and suspend ¯ags set cannot be selected. First, the scheduler tries to ®nd a context with all the ¯ags listed in Table 1 cleared. If there is more than one candidate, they will be selected in a round robin manner to get a mixed of instructions. If none of the context have all the ¯ags cleared then contexts with only the speculation ¯ag set is chosen. Similarly, a round robin method is used when there is more than one candidate.</p>
+<p>The decode unit performs instructions decoding, register renaming and result commit. The decode unit has an instruction width that is equal to that of the fetch unit so that all the instructions fetched in 1 cycle can be decoded in 1 cycle. Reorder buers [14] was used as the register renaming mechanism. Since we have multiple register ®les, we used multiple reorder buers, one for each register ®le. A branch history buer with 2-bit history is used to perform branch prediction. All the executing threads share the branch history buer.</p>
+<p>The executing threads also share the instruction window and execution units. Decoded instructions will be placed in the instruction window. The instruction window could be made of a single instruction buer as in the UltraSparc [16,19] or several instruction queues as in the MIPS R10000 [21]. Instructions from dierent threads will be interspersed in the shared buer or queues. Instruction issue only needs to consider data dependencies. In particular, the context id does not</p>
+<p>play a role in instruction issue. In other words, instructions from dierent threads can be issued in the same cycle. The context id is only used to determine which register ®le or reorder buer to access.</p>
+<p>The data cache is also shared among all the executing threads. The multithreaded applications are assumed to execute in the same memory address space. If we use multiple data caches, one for each context, some form of cache coherence control will be required thereby increasing the complexity. Therefore, we have chosen to use a single shared data cache.</p>
+<h1 id="32-hardware-implementation-of-multithreaded-constructs">3.2. Hardware implementation of multithreaded constructs</h1>
+<p>We have identi®ed ®ve primitive multithreaded constructs. We assume that these are added into the instruction set architecture of MCMS. Thread create increases the number of executing threads while thread terminate decreases the number of executing threads. Mutex lock and mutex unlock can be used to create a critical section. This provides atomic modi®cations to the shared memory. Barrier synchronisation is a point where the threads can exchange information.</p>
+<p>A thread unit is added into the MCMS architecture to execute all the above instructions. Three tables are used to store the status of mutex locks and barrier synchronisation. The lock table and sync table holds the status of mutex locks and barrier synchronisation respectively. The number of entries in the lock table and sync table corresponds to the number of supported hardware mutex locks and barrier respectively. The wait-for table records the lock or barrier that a context is currently waiting for. One entry is allocated to one context. This is sucient as one context can only wait for one mutex lock or one barrier at a time (see Table 2).</p>
+<p>Table 2 Thread unit table's ®eld</p>
+<table><tr><td>Table</td><td>Field</td><td>Description</td></tr><tr><td>Lock</td><td>Lock/unlock</td><td>Set if the lock is used and clear if it is not</td></tr><tr><td rowspan="2">Sync</td><td>Max</td><td>Number of threads that will synchronise at this barrier</td></tr><tr><td>Remaining</td><td>Remaining number of threads that will synchronise at this barrier</td></tr><tr><td rowspan="2">Wait-for</td><td>Lock/sync</td><td>Waiting for a lock or barrier</td></tr><tr><td>Lock id/sync id</td><td>The id of the lock or sync the thread is waiting for</td></tr></table>
+
+<p>The decode unit will set the suspend ¯ag of the thread's PSR when a mutex lock or barrier synchronisation instruction is decoded. It also purges all the already fetched instructions beyond the mutex lock or barrier synchronisation instruction. Then, the PC is set to point to the next instruction. After the suspend ¯ag is set, no further instruction will be fetched from that thread. This ensures that no instruction beyond the mutex lock or barrier synchronisation is executed before the lock is successfully acquired or the barrier synchronisation has completed.</p>
+<p>All the decoded multithreaded instructions will be stored in an instruction queue. Such an instruction can only be executed when its reorder buer entry reaches the head. This ensures that all previous instructions from the thread have already completed. This is to enforce correctness. Early execution of mutex lock instructions does not violate correctness but requires some exception handling. Therefore, we chose to avoid early execution of mutex lock instructions.</p>
+<p>When a thread create instruction is executed, a new thread is created by allocating a free hardware context to it. The PSR and the PC of the selected context will be initialised. The new thread will then participate in the fetch scheduling for instruction fetch. When a thread terminate instruction is</p>
+<p>executed, the resources of the context it is occupying is freed. Setting the free ¯ag in the PSR of the terminating thread does this.</p>
+<p>For mutex lock, the decode unit would have set the suspend ¯ag of the PSR when the instruction is decoded. When a mutex lock is executed, we ®rst check the entry of the lock id in the lock table. If the status is clear, the lock is available. In this case, set the status of the entry in the lock table and clear the suspend ¯ag in its context's PSR. This will allow the thread to resume instruction fetch. If the status of the lock is already set then the lock has been acquired by another thread. In this case, the lock id is placed in its entry of the wait-for table. It will have to wait until the current owner of the lock releases the lock.</p>
+<p>When a mutex unlock instruction is encountered, all the entries of the wait-for table are checked to see if there is any thread waiting for the lock. If a thread waiting for the lock is found, the suspend ¯ag of PSR and the wait-for entry of the waiting thread are cleared. Otherwise, the lock is released by resetting the status of the lock in the lock table.</p>
+<p>For barrier synchronisation, the decode unit sets the suspend ¯ag of the PSR when the instruction is decoded. The entry of the sync id in the sync table is checked. If the <code>max'' and</code>remaining'' ®eld is 0, this is the ®rst thread that reaches the barrier synchronisation point. Both ®elds in the entry will have to be initialised to the number of threads to synchronise with. Then, the number in the <code>remaining'' ®eld is decreased by 1 and the sync id is put into the entry of the context in the wait-for table. If the</code>remaining'' ®eld is non zero, it is decremented and the sync id is stored into the corresponding entry in the wait-for table. When the number in the ``remaining'' ®eld becomes 0 after a decrement, the barrier synchronisation is complete. For every thread that is waiting for the sync id, the wait-for entry and the suspend ¯ag of the corresponding PSR are cleared. Also, the</p>
+<p>``max'' ®eld is decreased by 1 for every thread that has been resumed.</p>
+<h1 id="33-context-switching">3.3. Context switching</h1>
+<p>Context switching is required when the number of executing threads exceeds the number of available hardware contexts. As the number of hardware contexts limits the number of concurrent executing threads, additional threads have to be swapped out of the processor. Context switching is the process of replacing a thread in a context with another thread.</p>
+<p>We need some criteria to determine when should a thread be swapped out. We have selected two criteria. The ®rst one is when a thread fails to acquire a mutex lock and the second is when a thread is waiting for the completion of a barrier synchronisation. The reason for choosing them is that no instruction has to be purged. In these cases, all previous instructions have completed and the following instructions have not been fetched yet. Furthermore, the thread cannot continue execution.</p>
+<p>When a context switch occurs, we have to save the states of the thread to be swapped out and restore the states of the thread to be swapped in. The states include the PSR, PC, register ®le and its wait-for table entry. To reduce the overhead of saving and restoring the context's status, we added another ¯ag, ``swap-out'' ¯ag to the PSR. This ¯ag is set when a thread is to be swapped out. A context with its swap-out ¯ag set can be swapped out whenever the context is needed by another thread. Otherwise, it is allowed to continue occupying the context. If the thread can be resumed before it is swapped out, we do not have to save and restore its state.</p>
+<p>If there is no free context when a thread is created, the newly created thread will have to be swapped out. A context will be freed when a thread terminates. After a context becomes free,</p>
+<p>we can swap in a thread that is waiting to resume execution. To ®nd a thread that can resume execution, we will ®rst restore and check the wait-for entries of the swapped out threads. If a thread that can resume execution is found, its complete state will be restored and its execution subsequently resumed.</p>
+<p>When a thread meets the criteria to be swapped out, its swap-out ¯ag is set. If there is a thread waiting to be swapped in, a context switch will occur. Otherwise, the thread is allowed continue occupying the context. After a mutex unlock or a barrier synchronisation completes, one or more swapped out threads may be allowed to continue execution if there are free contexts available.</p>
+<h1 id="4-simulation-technique">4. Simulation technique</h1>
+<p>We will use simulations to quantify the performance of MCMS architecture. The bene®ts of simulations are the ¯exibility of recon®guring the processor's parameters and allowing for detailed collection of statistical information. We extended the SPATS simulator [11] to simulate MCMS architecture. SPATS is an accurate and ¯exible trace-driven cycle-by-cycle instruction level simulator for superscalar processors. The extensions are generating instruction traces for multithreaded applications and simulating the behaviour of MCMS architecture.</p>
+<p>An instruction trace is the sequence of all the executed instructions when the application is executed. We used the instrumentation tool, ATOM [5,12] in Digital Unix to extract the instruction trace. For a sequential program, we will get one sequence of instructions in the trace. For multithreaded applications, we will generate one instruction trace for each execution thread. With multiple instruction traces, each thread has the ¯exibility to progress at its own pace during the simulation. The only exception is enforcement of</p>
+<p>synchronisation constraint. We have written a simple user level multithreaded library, Uthread, to help extract the instruction traces of multithreaded applications using ATOM.</p>
+<p>We used the benchmark programs from the Splash [15] and Splash 2 [20] as the workloads for the simulations. These are shared memory parallel applications that can be multithreaded. The programs were compiled with the Digital C compiler with the optimisation ¯ags ` $\mathbf { \bar { \Psi } } - O 5 ^ { \circ }$ and `` fast''. Two versions of the programs are used, the sequential and multithreaded versions. The sequential version does not use any multithreading facilities and executes as a single threaded program. The Uthread library is used for the multithreaded version instead of the usual system</p>
+<p>multithreaded library. This is to allow for instruction trace generation using ATOM.</p>
+<p>In order to compare the performance of MCMS with a superscalar architecture, we will ®rst simulate a superscalar processor. The con®guration for the superscalar architecture will be abbreviated as SS. We surveyed the current superscalar processors to identify a realistic processor con®guration to simulate. Table 3 shows a comparison of the simulated con®gurations with the MIPS R10000 [21], Ultra Sparc I [19] and Alpha 21164 [4]. In addition, a comparison of the instruction execution latencies is given in Table 4.</p>
+<p>The cache con®gurations and latencies are shown in Table 5. The least recently used replacement policy was used for cache re®ll. A</p>
+<p>Table 3 Comparisons of processors con®guration</p>
+<table><tr><td></td><td>Simulated</td><td>MIPS R10000</td><td>Ultra Sparc I</td><td>Alpha 21164</td></tr><tr><td>Instruction fetch with Functional units</td><td>4</td><td>4</td><td>4</td><td>4</td></tr><tr><td>Memory</td><td>2</td><td>1</td><td>1</td><td>Use integer</td></tr><tr><td>Integer</td><td>2</td><td>2</td><td>2</td><td>2</td></tr><tr><td>Integer multiply</td><td>1</td><td>1</td><td>Use integer</td><td>Use integer</td></tr><tr><td>Floating point</td><td>2</td><td>2</td><td>2</td><td>2</td></tr><tr><td>FP divide/sqrt</td><td>1</td><td>1</td><td>1</td><td>1</td></tr><tr><td colspan="5">Memory configuration</td></tr><tr><td>Instruction cache</td><td>32 K</td><td>32 K</td><td>16 K</td><td>8 K</td></tr><tr><td>Data cache</td><td>32 K</td><td>32 K</td><td>16 K</td><td>8 K</td></tr><tr><td>Second level cache</td><td>4 M</td><td>512 K - 16 M</td><td>512 K - 4 M</td><td>96 K (int)
+1-64 M (ext)</td></tr><tr><td rowspan="2">TLB</td><td>64 entry (instr)</td><td>64 entry (shared)</td><td>64 entry (instr))</td><td>48 entry (instr)</td></tr><tr><td>64 entry (data)</td><td></td><td>64 entry (data)</td><td>64 entry (data)</td></tr><tr><td>Page size</td><td>64 K</td><td>4 K -16 M</td><td>8 K, 64 K, 512 K, 4 M</td><td>8 K, 64 K, 512 K, 4 M</td></tr><tr><td colspan="5">Instruction queue</td></tr><tr><td></td><td>Int: 16 entry</td><td>Int: 16 entry</td><td>Central buffer of 12 entry</td><td>2 buffer (slots) of 4
+entry each</td></tr><tr><td></td><td>Fp: 16 entry</td><td>Fp: 16 entry</td><td></td><td></td></tr><tr><td></td><td>Mem: 16 entry</td><td>Mem: 16 entry</td><td></td><td></td></tr><tr><td colspan="5">Branch prediction</td></tr><tr><td>2-bit branch target buffer</td><td>2048 entries</td><td>512 entries</td><td>2048 entries</td><td>2048 entries</td></tr></table>
+
+<p>Table 4 Comparisons of instruction execution latencies</p>
+<table><tr><td></td><td>Simulated</td><td>MIPS R10000</td><td>Ultra Sparc</td><td>Alpha 21164</td></tr><tr><td rowspan="2">Integer multiply</td><td>6 (single)</td><td>6 (single)</td><td>5 (single)</td><td>8 (single)</td></tr><tr><td>10 (double)</td><td>10 (double)</td><td>10 (double)</td><td>14 (double)</td></tr><tr><td>Other integer</td><td>1</td><td>1</td><td>1</td><td>1</td></tr><tr><td rowspan="2">Fp divide</td><td>14 (single)</td><td>14 (single)</td><td>12 (single)</td><td>19 (single)</td></tr><tr><td>21 (double)</td><td>21 (double)</td><td>22 (double)</td><td>31 (double)</td></tr><tr><td>Other Fp</td><td>3 (pipelined)</td><td>3 (pipelined)</td><td>3 (pipelined)</td><td>4 (pipelined)</td></tr><tr><td>Memory (address computation)</td><td>1</td><td>1</td><td>1</td><td>1</td></tr><tr><td>First level cache (hit)</td><td>1</td><td>1</td><td>1</td><td>1</td></tr></table>
+
+<p>Table 5 Caches con®guration and latencies</p>
+<table><tr><td></td><td>Instruction cache</td><td>Data cache</td><td>Second level cache</td></tr><tr><td>Cache size</td><td>32 K</td><td>32 K</td><td>4 Mb</td></tr><tr><td>Block size</td><td>32 b</td><td>32 b</td><td>64 b</td></tr><tr><td>Associativity</td><td>2-way set assoc.</td><td>2-way set assoc.</td><td>2-way set assoc.</td></tr><tr><td>Access time (hit)</td><td>1 cycle</td><td>1 cycle</td><td>5 cycles</td></tr></table>
+
+<p>64-entry translation lookaside buer (TLB) was included in both the instruction cache and data cache. A penalty of 30 cycles was imposed for a TLB miss and 25 cycles for second level cache miss. Both the integer and ¯oating-point instruction queues can dispatch instructions out-of-order. The memory queue can only dispatch instructions in-order. Also, store instructions are only permitted to update the data cache after all its previous instructions have completed. For the simulation of SS, the sequential workloads are used.</p>
+<p>For the MCMS architecture, we used four different con®gurations. Each supports a dierent number of hardware contexts. For the h1 con®guration, there is 1 hardware context, for the h2, h4 and h8 con®gurations, there are 2, 4 and 8 hardware contexts, respectively. This determines the maximum number of threads that can be executed</p>
+<p>concurrently. The hardware resources of these con®gurations is the same as the SS con®guration with the addition of a thread unit and multiple contexts. The only resource advantage of the MCMS con®gurations over SS is the extra register ®les and reorder buers.</p>
+<p>The simulation of MCMS con®gurations used the multithreaded workloads instead of the sequential ones. The workloads are set to run with 8 software threads in all the MCMS con®gurations. With this, the workloads used on dierent con®gurations of MCMS were identical. No context switching is required in $h 8$ as all the 8 threads can be accommodated by the hardware contexts. However, context switching is required for h1, h2 and $h 4$ because only 1, 2 and 4 threads may coexist in the processor at any one time, respectively. One diculty we had was to account for the</p>
+<p>overhead in context switching. We opted not to account for this as this we believe is implementation dependent and since there have not been many such implementations, it is not possible to give a realistic approximation.</p>
+<h1 id="5-simulation-results">5. Simulation results</h1>
+<p>We ®rst simulated the sequential workloads on a superscalar processor (con®guration SS). The result was used to identify the limitations of instruction level parallelism in sequential programs. After that, the MCMS con®gurations were simulated using the multithreaded workloads. The number of threads used for our study is ®xed at 8. An analysis was made to identify the source of the performance improvements and the possible bottlenecks.</p>
+<h1 id="51-limited-instruction-level-parallelism-in-sequential-programs">5.1. Limited instruction level parallelism in sequential programs</h1>
+<p>Our simulation results of the superscalar processor (con®guration SS) showed that the instructions per cycle (ipc) ranges from 0.71 to 0.97. This is less than a quarter of the peak performance of 4 ipc according to the simulated processor con®guration. The limitations of a superscalar processor can be categorised into data dependencies, control dependencies and resource con¯ict.</p>
+<p>The graph in Fig. 2 shows the percentage of cycles where there are 0, 1, 2, 3 and 4 or more ready instructions in the instruction queues. A ready instruction is an instruction that has all its source operands value available and it can be dispatched for execution. Due to resource contentions, not all of the ready instructions may be dispatched for execution in each cycle. The graph</p>
+<p><img alt="" src="posts/论文阅读/mineru_assets/Loh和Wong - 2000 - Multiple context multithreaded superscalar processor architecture/images/ee234986240ce246795ec5337073fd32e65b5fa1b5025304c47a3859cde57e54.jpg" />
+Fig. 2. Distributions of issue cycles and number of ready instructions.</p>
+<p>also shows the percentage of cycles where 0, 1, 2, 3 and 4 or more instructions are issued for execution.</p>
+<p>The instruction queues are empty in only less than $3 \%$ of the total execution time and there are more than four instructions in more than $70 \%$ of the total execution time. Therefore, there is no instruction starvation in the queues. The computation does not include the instructions that are fetched due to wrong branch prediction. As control dependency will cause instruction starvation, we can say that control dependency is not a severe limitation factor.</p>
+<p>From the graph in Fig. 2, there is no ready instruction in $3 7 - 5 1 \%$ of the total execution time. When there is no ready instruction, no instruction can be issued for execution. This is the major limitation to the instruction throughput. The source of the problem is data dependency. Most of the instructions in the instruction queues are waiting for the values of their source operands. This shows that there is not enough instruction level parallelism in the programs to utilise the wider pipeline of superscalar processor. There is no severe resource contention as the number of ready instructions is low.</p>
+<h1 id="52-performance-of-the-mcms">5.2. Performance of the MCMS</h1>
+<p>The speedup of MCMS (con®guration h1, h2, h4 and h8) relative to the superscalar processor (con®guration SS) is shown in the graph in Fig. 3. The results show no signi®cance speedup with 1 hardware context (h1) over the SS. The most obvious reason would be that both con®gurations only allow a single thread to be in execution at a time. No inter thread instruction level parallelism can be exploited in h1. The graph clearly shows an improvement in speedup (1.3±2.5 times) with 2 and 4 hardware contexts (h2 and h4). The speedup gained by having 8 hardware contexts is less signi®cance. In the cases of ocean and radix, h8 actually shows lower performance than h4. Ocean encounters high number of cache misses. The memory requirements limit its performance. Radix faces a huge increase in tlb misses when the number of context increases.</p>
+<p>The graphs in Fig. 4 shows the average number of ready instructions per cycle and average number of instructions issued per cycle for each program with varying number of hardware contexts. From the graphs, we can see that the average number of ready instructions increases with the number of</p>
+<p><img alt="" src="posts/论文阅读/mineru_assets/Loh和Wong - 2000 - Multiple context multithreaded superscalar processor architecture/images/7e1ad8684d2feec26e92df22c6c9b1b895f35ac7aee9196e4a355e478737c4e3.jpg" />
+Fig. 3. Speedup for dierent number of contexts.</p>
+<p><img alt="" src="posts/论文阅读/mineru_assets/Loh和Wong - 2000 - Multiple context multithreaded superscalar processor architecture/images/389199c9d2b5226bc89311907c5a8df268495b3fe96b6df3ad1fb5d59f20d2b2.jpg" /></p>
+<p><img alt="" src="posts/论文阅读/mineru_assets/Loh和Wong - 2000 - Multiple context multithreaded superscalar processor architecture/images/f4cb93a807c21e336e28c64bcc92abbfca2932d9bc1583ca58a95263dda8e613.jpg" />
+Fig. 4. Average number of instructions per cycle (ready and issued).</p>
+<p>hardware contexts. This shows that multiple contexts can increase the instruction level parallelism by exploiting inter thread parallelism. With more ready instructions, more instructions can now be issued for execution every cycle. Thus, increasing the overall instruction throughput.</p>
+<p>As shown by the graphs, the gaps between the average number of ready instructions and average number of instructions issued get larger with the increasing number of hardware contexts. A ready instruction cannot be issued for execution if the required execution unit is busy or occupied by another instruction. The huge gaps show the occurrence of resource contention. With multiple contexts, we reduce instructions data dependencies but in turn cause an increase in resource contention.</p>
+<p>When resource contention occurs, the average number of ready instructions will grow at a faster rate. The reason is that the ready instructions will stay in the instruction queues for a longer period of time. This will increase the average number of ready instructions per cycle. Therefore, the actual instruction level parallelism may not be as high as the average number of ready instructions. When more execution units are added, we expect the gaps to be narrowed. Instruction issue rate will increase while the number of ready instructions will decrease.</p>
+<h1 id="53-cache-misses">5.3. Cache misses</h1>
+<p>The caches are shared among all the executing threads. With multiple contexts, the memory</p>
+<p>reference from multiple threads will interleave and mix with each other. As the same workload of 8 threads is used for dierent processor con®gurations (h1, h2, h4 and h8), the memory references for each thread is still the same. However, the actual order of the memory references made on the data cache will be dierent for the varying number of hardware contexts.</p>
+<p>In h1, only the thread occupying the hardware context may reference the memory. In h8, the memory reference for all the eight threads will intersperse and mix with each other. With multiple threads referencing the data cache in an interleaved manner, locality may be destroyed. A thread may cause a cache line needed by another thread in the near future to be replaced. This will increase the miss ratio. On the other hand, a thread may reference a cache line that has been fetched by another thread, reducing the miss ratio. This occurs when multiple executing threads share the same piece of data.</p>
+<p>Fig. 5 shows the number of data cache misses per thousand instructions. The misses are divided into intra thread and inter thread misses. Inter thread misses are misses that would have been hits if each thread is given a separate $3 2 \mathrm { ~ K ~ }$ data cache.</p>
+<p>The data cache misses generally increases with the increasing number of context. The increase is mainly caused by inter thread misses. This shows that inter-thread interference may destroy the cache locality and cause severe cache thrashing.</p>
+<h1 id="54-execution-units">5.4. Execution units</h1>
+<p>We have identi®ed earlier that resource contentions could be a limiting factor when the number of hardware contexts increases. Therefore, we furthered our investigation by increasing the number of execution units. We added two more integer units, two more ¯oating-point units and two more memory units. The number of ports of the data cache is increased to four to match the number of memory units. All other resources are kept unchanged.</p>
+<p>The graph in Fig. 6 compares the performance of the base con®gurations and the con®gurations with extra execution units. The graphs show that generally the performance improvement is greater with higher number of contexts. For h1 and h2, the extra resources do not provide much improvement because the extra execution units are hardly utilised. The execution units in the base</p>
+<p><img alt="" src="posts/论文阅读/mineru_assets/Loh和Wong - 2000 - Multiple context multithreaded superscalar processor architecture/images/ca02233204214e30e2a4d5fb5a03d63e5fd8858e5dcd944ae23c67021339e151.jpg" />
+Fig. 5. Data cache misses per thousand instructions.</p>
+<p><img alt="" src="posts/论文阅读/mineru_assets/Loh和Wong - 2000 - Multiple context multithreaded superscalar processor architecture/images/9b91227df440248b4c5b9ee222098437badaf34e721c96bed42e9b6a681ba7a0.jpg" />
+Fig. 6. Performance with extra execution units.</p>
+<p>con®gurations can already almost satisfy the resource requirements in h1 and $h 2$ . The performance improvement is more obvious in $h 4$ and h8 where resource contention is more severe. One exception is detected in ocean where there is no improvement in $h 8$ . This is because ocean faces memory limitation and not resource contention.</p>
+<p>About $60 \%$ of the instructions in radix are ¯oating-point instructions. This has caused a huge resource contention on the ¯oating-point execution units in $h 4$ and $h 8$ . With the extra execution units, we can improve the overall performance of radix by $8 \%$ and $1 5 \%$ in $h 4$ and $h 8$ , respectively. There is also an increase of $7 \%$ and $1 1 \%$ in $h 4$ and $h 8$ , respectively, for $\tt m p 3 d$ .</p>
+<h1 id="6-conclusion">6. Conclusion</h1>
+<p>In this paper, we have outlined the design of the MCMS architecture, which can be used to exploit the instruction level parallelism of multiple threads of execution. The main idea is to allow instructions</p>
+<p>from multiple threads to be executed concurrently. Our proposal includes a mechanism to support multiple contexts, a hardware implementation of multithreaded constructs together with a context switching mechanism. All these can be built onto a conventional superscalar processor architecture.</p>
+<p>Our simulation results veri®ed that sequential programs could not provide enough instruction level parallelism to fully utilise the wider pipeline of superscalar architecture. We have identi®ed that the main obstacle is data dependencies. Control dependencies and resource con¯icts do not give rise to any severe performance limitation in a superscalar processor architecture.</p>
+<p>The results of simulating the execution of multithreaded applications on the MCMS architecture showed that allowing multiple threads to execute concurrently can increase the average number of ready instructions in the instruction queues. More concurrent threads will produce more ready instructions. This will in turn let more instructions to be issued for execution every cycle. Thus, instruction throughput will be increased.</p>
+<p>A 4-context MCMS processor con®guration can achieve a speedup of 1.6±2.5 times over a superscalar processor with similar hardware resources.</p>
+<p>With the increasing number of hardware contexts (up to 8), we found that the limitations started to shift from data dependencies to resource contentions. This is due to the higher resource requirements. A speedup of 2 will double the resource utilisation. At some stage, the speedup will be limited by the resource contention. Increasing the resources such as adding more execution units can alleviate this. Increasing number of hardware contexts also cause cache thrashing. Cache locality may be destroyed by multiple concurrent executing threads. Despite these caveats, we believe that in the current scenario where chip density is ever increasing, hardware multithreading in a superscalar processor is a promising approach. We hope this work will contribute to the understanding of the trade-os involved.</p>
+<h1 id="references">References</h1>
+<p>[1] A. Agarwal, B.-H. Lim, D. Kranz, J. Kubiatowicz, APRIL: A processor architecture for multiprocessing, in: Proceedings of the 17th Annual International Symposium on Computer Architecture, May 1990.
+[2] R. Alverson, D. Callahan, D. Cummings, B. Koblenz, A. Porter®eld, B. Smith, The tera computer systems, in: Proceedings of the International Conference of Supercomputing, June 1990.
+[3] B. Boothe, A. Ranade, Improved multithreading techniques for hiding communication latency in multiprocessors, in: Proceedings of the 19th Annual International Symposium on Computer Architecture, 1992.
+[4] H. John Edmondson, Paul Rubinfeld, Ronald Preston, Vidya Rajagopalan, Superscalar Instruction Execution in the 21164 Alpha Microprocessor, IEEE Micro, April 1995.
+[5] A. Eustace, A. Srivastava, ATOM: A Flexible Interface for Building High Performance Program Analysis Tool, WRL Technical Note July 1994.
+[6] M. Gulati, N. Bagherzadeh, Performance study of a multithreaded superscalar microprocessor, in: Proceedings of the International Symposium of High Performance Computer architecture, ACM, 1996.</p>
+<p>[7] H.R. Halstead Jr., T. Fujita, MASA: A multithreaded processor architecture for parallel symbolic computing, in: Proceedings of the 15th Annual International Symposium of Computer Architecture, June 1988.
+[8] H. Hirata, K. Kimura, S. Nagamine et al., An elementary processor architecture with simultaneous instruction issuing from multiple threads, in: Proceedings of the International Conference of Computer Architecture, 1992.
+[9] S. Hily, A. Seznec, Contention on Second Level Cache may Limit the Eectiveness of Simultaneous Multithreading, Technical Report PI-1086, IRISA, France, 1997.
+[10] J.L. Lo, S.J. Eggers, J.S. Emer, H.M. Levy, R.L. Stamm, D.M. Tullsen, Converting thread-level parallelism to instruction-level parallelism via simultaneous multithreading, ACM Transactions on Computer Systems, August 1997.
+[11] K.S. Loh, M.K. Quek, W.F. Wong, SPATS ± Accurate and ¯exible simulation of superscalar processors, in: Third Australasian Computer Architecture Conference, February 1998, Perth, Australia.
+[12] A. Srivastava, A. Eustace, ATOM: A System for Building Customized Program Analysis Tools, WRL Research Report March 1994.
+[13] B.J. Smith, Architecture and applications of the HEP multiprocessors system, in: Proceedings of the SPIE ± Real Time Signal Processing, August 1981.
+[14] E.J. Smith, A.R. Pleszkun, Implementation of precise interrupts in pipelined processors, in: Proceedings of the 12th Annual International Symposium on Computer Architecture, 1985.
+[15] J.P. Singh, W.-D. Weber, A. Gupta, SPLASH: Stanford Parallel Applications for Shared Memory, Computer Architecture News, March 1992.
+[16] The UltraSPARC Processor ± Technology White Paper The UltraSPARC Architecture, Sun Microsystems Inc., 1995.
+[17] D.M. Tullsen, S.J. Eggers, H.M. Levy, Simultaneous multithreading: Maximizing on-Chip parallelism, in: Proceedings of the 22nd Annual International Symposium on Computer Architecture, June 1995.
+[18] D.M. Tullsen, S.J. Eggers, J.S. Emer, H.M. Levy, J.L. Lo, R.L. Stamm, Exploiting choice: Instruction fetch and issue on an implementable simultaneous multithreading processor, in: Proceedings of the 23rd Annual International Symposium on Computer Architecture, May 1996.
+[19] M. Trembly, J. Micheal O'Connor, UltraSparc I: A fourissue processor supporting multimedia, IEEE Micro, April 1996.
+[20] S.C. Woo, M. Ohara, E. Torrie, J.P. Singh, A. Gupta, The SPLASH-2 programs: Characterization and methodolog-</p>
+<p>ical considerations, in: Proceedings of the 22nd Annual International Symposium on Computer Architecture, June 1995.
+[21] K.C. Yeager, The MIPS R10000 Superscalar Microprocessor, IEEE Micro, April 1996.</p>
+<p><img alt="" src="posts/论文阅读/mineru_assets/Loh和Wong - 2000 - Multiple context multithreaded superscalar processor architecture/images/4ba08a9cab60362cc0aba933896b44c0f850ce490a58f97296e09089c4d32143.jpg" /></p>
+<p>Kim-Seong Loh received his B.Sc. (Hons) from the National University of Singapore in 1997 and his M.Sc in 1998. He is currently working for a company specialising in multilingual software. His research interest includes processor pipelining, optimisation and performance evaluation.</p>
+<p><img alt="" src="posts/论文阅读/mineru_assets/Loh和Wong - 2000 - Multiple context multithreaded superscalar processor architecture/images/279eec5b96bd5a0f9025a4e8ab6409dc97a294e526de62693d231668b8d12ab9.jpg" /></p>
+<p>Weng-Fai Wong received his B.Sc. (Hons) and M.Sc. from the National University of Singapore in 1989 and 1991 respectively. He obtained his Dr. Eng. Sc. from the University of Tsukuba, Japan, in 1993. He is currently Assistant Professor at the Department of Computer Science of the National University of Singapore. His research interests include processor architecture, compiler optimisations and parallel processing.</p>

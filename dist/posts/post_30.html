@@ -1,80 +1,57 @@
-<h1 id="openwrt">OpenWRT常用配置</h1>
-<h2 id="aaaa">屏蔽AAAA记录</h2>
-<h3 id="dnsmasq">DNSMasq</h3>
-<p>如果LuCI上有屏蔽AAAA记录的选项，启用即可，否则建议改用smartdns</p>
-<h3 id="smartdns">SmartDNS</h3>
-<p>在<code>/etc/smartdns/address.conf</code>里添加：</p>
-<div class="codehilite"><pre><span></span><code>force-AAAA-SOA yes
-</code></pre></div>
+<h1 id="dockernetmaker">docker部署netmaker</h1>
+<div class="codehilite"><pre><span></span><code>mkdir<span class="w"> </span>netmaker
+<span class="nb">cd</span><span class="w"> </span>netmaker
+wget<span class="w"> </span>https://github.com/gravitl/netmaker/raw/master/compose/docker-compose.yml
+sed<span class="w"> </span>-i<span class="w"> </span><span class="s2">&quot;s/80:80/10080:80/g&quot;</span><span class="w"> </span>./docker-compose.yml
+sed<span class="w"> </span>-i<span class="w"> </span><span class="s2">&quot;s/443:443/10443:443/g&quot;</span><span class="w"> </span>./docker-compose.yml
 
-<p>也可以在LuCI操作。</p>
-<h2 id="linuxupnp">Linux上配置UPnP</h2>
-<div class="codehilite"><pre><span></span><code>apt<span class="w"> </span>install<span class="w"> </span>miniupnpd
-<span class="c1"># 根据提示输入WAN端口和LAN端口</span>
-</code></pre></div>
-
-<h2 id="mwan3">MWAN3分流</h2>
-<h3 id="mwan3_1">安装MWAN3</h3>
-<div class="codehilite"><pre><span></span><code>opkg<span class="w"> </span>update
-opkg<span class="w"> </span>install<span class="w"> </span>luci-app-mwan3
-</code></pre></div>
-
-<h3 id="ipset">配置分流IPSet</h3>
-<div class="codehilite"><pre><span></span><code>mkdir<span class="w"> </span>/etc/ipsets
-<span class="nb">cd</span><span class="w"> </span>/etc/ipsets
-cat<span class="w"> </span>&gt;<span class="w"> </span>./gen_ipsets.sh<span class="w"> </span><span class="s">&lt;&lt; EOF</span>
-<span class="s">#!/bin/sh</span>
-<span class="s">wget -c http://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest</span>
-<span class="s">cat delegated-apnic-latest | awk -F &#39;|&#39; &#39;/CN/&amp;&amp;/ipv4/ {print &quot;ipset add ipv4_CN &quot; $4 &quot;/&quot; 32-log($5)/log(2)}&#39; | cat &gt; /tmp/ipv4_CN.sh</span>
-<span class="s">sed -i &#39;1s/^/#!\/bin\/bash\nipset create ipv4_CN hash:net hashsize 16384\n/&#39; ipv4_CN.sh</span>
-<span class="s">cat delegated-apnic-latest | awk -F &#39;|&#39; &#39;/CN/&amp;&amp;/ipv6/ {print &quot;ipset add ipv6_CN &quot; $4 &quot;/&quot; $5}&#39; | cat &gt; /tmp/ipv6_CN.sh</span>
-<span class="s">sed -i &#39;1s/^/#!\/bin\/bash\nipset create ipv6_CN hash:net family inet6 hashsize 4096\n/&#39; ipv6_CN.sh</span>
-<span class="s">rm delegated-apnic-latest</span>
+cat<span class="w"> </span><span class="s">&lt;&lt; EOF &gt; ./netmaker.env</span>
+<span class="s">SERVER_IMAGE_TAG=latest</span>
+<span class="s">UI_IMAGE_TAG=latest</span>
+<span class="s">SERVER_HOST=203.0.113.27</span>
+<span class="s">NM_DOMAIN=nm.dreamchaser-luzeyu.cn</span>
 <span class="s">EOF</span>
-chmod<span class="w"> </span>+x<span class="w"> </span>./gen_ipsets.sh
-sh<span class="w"> </span>/tmp/ipv4_CN.sh
-sh<span class="w"> </span>/tmp/ipv6_CN.sh
+
+cat<span class="w"> </span><span class="s">&lt;&lt; EOF &gt; ./Caddyfile</span>
+<span class="s">{</span>
+<span class="s">    email yydluzeyu@gmail.com</span>
+<span class="s">}</span>
+<span class="s"># Dashboard</span>
+<span class="s">https://dashboard.nm.dreamchaser-luzeyu.cn {</span>
+<span class="s">    # Apply basic security headers</span>
+<span class="s">    header {</span>
+<span class="s">            # Enable cross origin access to *.NETMAKER_BASE_DOMAIN</span>
+<span class="s">            Access-Control-Allow-Origin *.nm.dreamchaser-luzeyu.cn</span>
+<span class="s">            # Enable HTTP Strict Transport Security (HSTS)</span>
+<span class="s">            Strict-Transport-Security &quot;max-age=31536000;&quot;</span>
+<span class="s">            # Enable cross-site filter (XSS) and tell browser to block detected attacks</span>
+<span class="s">            X-XSS-Protection &quot;1; mode=block&quot;</span>
+<span class="s">            # Disallow the site to be rendered within a frame on a foreign domain (clickjacking protection)</span>
+<span class="s">            X-Frame-Options &quot;SAMEORIGIN&quot;</span>
+<span class="s">            # Prevent search engines from indexing</span>
+<span class="s">            X-Robots-Tag &quot;none&quot;</span>
+<span class="s">            # Remove the server name</span>
+<span class="s">            -Server</span>
+<span class="s">    }</span>
+
+<span class="s">    reverse_proxy http://netmaker-ui</span>
+<span class="s">}</span>
+<span class="s"># API</span>
+<span class="s">https://api.nm.dreamchaser-luzeyu.cn {</span>
+<span class="s">        reverse_proxy http://netmaker:8081</span>
+<span class="s">}</span>
+<span class="s"># MQ</span>
+<span class="s">wss://broker.nm.dreamchaser-luzeyu.cn {</span>
+<span class="s">        reverse_proxy ws://mq:8883</span>
+<span class="s">}</span>
+<span class="s">EOF</span>
+
+<span class="c1"># 将*.nm.dreamchaser-luzeyu.cn代理到10080和10443</span>
+
+docker-compose<span class="w"> </span>-f<span class="w"> </span>./docker-compose.yml
 </code></pre></div>
 
-<p>可以将<code>/etc/ipsets/gen_ipsets.sh</code>加入计划任务</p>
-<h3 id="_1">路由表分流</h3>
-<div class="codehilite"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">V4_GATEWAY</span><span class="o">=</span><span class="s2">&quot;192.168.1.1 dev enp1s0&quot;</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">V6_GATEWAY</span><span class="o">=</span><span class="s2">&quot;fd00:520::1 dev enp1s0&quot;</span>
-wget<span class="w"> </span>http://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest<span class="w"> </span>-O<span class="w"> </span>/tmp/delegated-apnic-latest
-cat<span class="w"> </span>/tmp/delegated-apnic-latest<span class="w"> </span><span class="p">|</span><span class="w"> </span>awk<span class="w"> </span>-F<span class="w"> </span><span class="s1">&#39;|&#39;</span><span class="w"> </span><span class="s1">&#39;/CN/&amp;&amp;/ipv4/ {print $4 &quot;/&quot; 32-log($5)/log(2)}&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>cat<span class="w"> </span>&gt;<span class="w"> </span>/tmp/Direct_v4
-cat<span class="w"> </span>/tmp/delegated-apnic-latest<span class="w"> </span><span class="p">|</span><span class="w"> </span>awk<span class="w"> </span>-F<span class="w"> </span><span class="s1">&#39;|&#39;</span><span class="w"> </span><span class="s1">&#39;/CN/&amp;&amp;/ipv6/ {print $4 &quot;/&quot; $5}&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>cat<span class="w"> </span>&gt;<span class="w"> </span>/tmp/Direct_v6
-sed<span class="w"> </span><span class="s1">&#39;s/^/ip route add /&#39;</span><span class="w"> </span>/tmp/Direct_v4<span class="w"> </span>&gt;<span class="w"> </span>/tmp/no_route_ipv4.sh
-sed<span class="w"> </span>-i<span class="w"> </span><span class="s2">&quot;s/</span>$<span class="s2">/ via </span><span class="si">${</span><span class="nv">V4_GATEWAY</span><span class="si">}</span><span class="s2">/&quot;</span><span class="w"> </span>/tmp/no_route_ipv4.sh
-sed<span class="w"> </span><span class="s1">&#39;s/^/ip -6 route add /&#39;</span><span class="w"> </span>/tmp/Direct_v6<span class="w"> </span>&gt;<span class="w"> </span>/tmp/no_route_ipv6.sh
-sed<span class="w"> </span>-i<span class="w"> </span><span class="s2">&quot;s/</span>$<span class="s2">/ via </span><span class="si">${</span><span class="nv">V6_GATEWAY</span><span class="si">}</span><span class="s2">/&quot;</span><span class="w"> </span>/tmp/no_route_ipv6.sh
-<span class="nb">unset</span><span class="w"> </span>V4_GATEWAY
-<span class="nb">unset</span><span class="w"> </span>V6_GATEWAY
-sh<span class="w"> </span>/tmp/no_route_ipv4.sh
-sh<span class="w"> </span>/tmp/no_route_ipv6.sh
-</code></pre></div>
-
-<h2 id="dns">DNS分流</h2>
-<h3 id="_2">配置规则</h3>
-<div class="codehilite"><pre><span></span><code>wget<span class="w"> </span>https://rawghuc.020124.xyz/felixonmars/dnsmasq-china-list/master/accelerated-domains.china.conf
-<span class="c1"># 在第一行增加force-AAAA-SOA yes</span>
-sed<span class="w"> </span>-i<span class="w"> </span><span class="s2">&quot;1i force-AAAA-SOA yes&quot;</span><span class="w"> </span>./accelerated-domains.china.conf
-<span class="c1"># 把所有的114.114.114.114替换为119.29.29.29</span>
-sed<span class="w"> </span>-i<span class="w"> </span><span class="s2">&quot;s/203.0.113.34/203.0.113.35/g&quot;</span><span class="w"> </span>./accelerated-domains.china.conf
-<span class="c1"># 把所有的&quot;server=&quot;替换成&quot;nameserver &quot;</span>
-sed<span class="w"> </span>-i<span class="w"> </span><span class="s2">&quot;s/server=/nameserver /g&quot;</span><span class="w"> </span>./accelerated-domains.china.conf
-<span class="c1"># 覆盖原配置文件</span>
-mv<span class="w"> </span>/etc/smartdns/address.conf<span class="w"> </span>/etc/smartdns/address.conf.bak
-cp<span class="w"> </span>./accelerated-domains.china.conf<span class="w"> </span>/etc/smartdns/address.conf
-<span class="c1"># 重启smartdns</span>
-/etc/init.d/smartdns<span class="w"> </span>restart
-</code></pre></div>
-
-<h3 id="dnsmasq_1">替换DNSMasq</h3>
-<p>将dnsmasq监听端口改为其他端口，然后将smartdns监听端口改为53</p>
-<h2 id="mss">MSS钳制</h2>
-<p>各个端口的MTU要配置正确。</p>
-<div class="codehilite"><pre><span></span><code><span class="c1"># --- MTU配置</span>
-<span class="c1"># 填入自定义防火墙规则</span>
-iptables<span class="w"> </span>-t<span class="w"> </span>mangle<span class="w"> </span>-A<span class="w"> </span>FORWARD<span class="w"> </span>-p<span class="w"> </span>tcp<span class="w"> </span>--tcp-flags<span class="w"> </span>SYN,RST<span class="w"> </span>SYN<span class="w"> </span>-j<span class="w"> </span>TCPMSS<span class="w"> </span>--clamp-mss-to-pmtu
-ip6tables<span class="w"> </span>-t<span class="w"> </span>mangle<span class="w"> </span>-A<span class="w"> </span>FORWARD<span class="w"> </span>-p<span class="w"> </span>tcp<span class="w"> </span>--tcp-flags<span class="w"> </span>SYN,RST<span class="w"> </span>SYN<span class="w"> </span>-j<span class="w"> </span>TCPMSS<span class="w"> </span>--clamp-mss-to-pmtu
+<div class="codehilite"><pre><span></span><code><span class="c1">#</span>
+sudo<span class="w"> </span>wget<span class="w"> </span>-qO<span class="w"> </span>/root/nm-quick.sh<span class="w"> </span>https://raw.githubusercontent.com/gravitl/netmaker/master/scripts/nm-quick.sh<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>sudo<span class="w"> </span>chmod<span class="w"> </span>+x<span class="w"> </span>/root/nm-quick.sh<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>sudo<span class="w"> </span>/root/nm-quick.sh
+/root/nm-quick.sh<span class="w"> </span>-d
 </code></pre></div>

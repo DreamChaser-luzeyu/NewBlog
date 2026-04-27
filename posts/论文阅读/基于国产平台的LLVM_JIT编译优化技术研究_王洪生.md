@@ -1,218 +1,1088 @@
 ---
-title: 论文阅读：基于国产平台的 LLVM JIT 编译优化技术研究
-date: 2026-04-26
+title: 论文阅读：关键词：申威处理器 LLVM 即时编译 编译后端移植 优化
+date: 2026-04-27
 tags:
 - 论文阅读
-- LLVM
-- JIT
-- 申威
-- 编译器
-- SW64
 ---
 
-本文档由 AI 总结，可能有错误。
+文档由AI总结，可能有错误。
 
-这篇论文研究的是：国产申威处理器虽然已经在超算、服务器等场景中应用，但软件生态尤其是 LLVM 这一类现代编译器基础设施仍然薄弱，导致很多依赖 LLVM 的系统和应用难以迁移。作者要解决的是，怎样让申威平台支持 LLVM 的即时编译能力，并进一步减少 JIT 在运行时“边编译边执行”带来的性能损失。论文的方法是：把 LLVM 的后端和 MCJIT 相关组件移植到申威 SW64 平台，再针对 JIT 中很耗时的指令选择流程做优化，最后用 test-suite 和 SPEC CPU2006 验证正确性与收益。
+国产申威处理器已用于超级计算机等领域，但缺乏LLVM编译框架支持，导致许多基于LLVM的大数据和人工智能项目无法迁移，威胁信息系统安全。同时，即时编译器运行时编译速度较慢。作者通过编译器后端移植方法，在LLVM中实现了申威处理器后端，使其支持LLVM即时编译系统；并针对指令选择耗时过长的问题，优化了代码生成流程，优先采用快速指令选择方案。测试表明，优化后C/C++程序平均运行时间减少了4.66%。
 
-## 论文信息
+# 摘要
 
-- 标题：基于国产平台的 LLVM JIT 编译优化技术研究
-- 作者：王洪生
-- 类型：专业硕士论文
-- 学校：郑州大学
-- 时间：2020 年 6 月
+申威系列处理器是采用自主指令集且具有完全自主知识产权的国产通用处理器，已经成功应用在超级计算机、高性能服务器、存储系统、网络安全等多个领域。LLVM 作为开源编译框架被商业和开源项目广泛采用，尤其是其即时编译系统，在大数据、人工智能等领域已经成为基础设施。然而目前申威处理器的软件生态中，尚未对 LLVM 编译器框架进行支持，许多基于 LLVM 开发的项目无法迁移到申威平台，关系到国计民生的部分信息系统基础设施面临着潜在的安全威胁，而软件生态系统的薄弱又进一步限制了申威处理器的应用和推广，亟需将LLVM 编译器框架引入到申威处理器的软件生态中。此外，即时编译器具有运行时编译的特性，较长的编译时间使得即时编译器的运行速度较慢。
 
-## 研究问题
+针对以上问题，本文采用编译器后端移植的方法在 LLVM 中实现了申威处理器后端以及相关组件，使得申威处理器支持了 LLVM 及其即时编译系统；并且通过优化代码生成流程，减少了程序编译的时间，提升了即时编译器的整体性能。本文的主要研究内容如下：
 
-这篇论文聚焦两个问题：
+（1）设计并实现了申威平台上的LLVM即时编译器。通过分析与研究LLVM即时编译的实现原理、即时编译系统的基本构成和各部分的功能原理以及 LLVM编译器架构的后端移植机制，结合申威处理器的特性，在国产申威平台上移植了LLVM 编译器并且支持了 LLVM 即时编译。
+（2）基于指令选择技术优化了申威平台的 LLVM 即时编译器。基于 LLVM即时编译器在运行时编译代码的特性以及 LLVM 后端代码生成中指令选择时间占比过高的问题，对指令选择的流程进行了调整和优化，实现了申威处理器后端的快速指令选择方案。通过优先使用快速指令选择方案，以求提升指令选择的速度从而在一定程度上提升即时编译器的整体性能。
 
-1. 申威平台缺少 LLVM 支持，很多基于 LLVM 的应用难以移植。
-2. JIT 编译在运行时做代码生成，编译开销大，影响整体执行效率。
+本文在申威平台上实现了 LLVM 即时编译器，并且优化了代码生成的流程，提升了该即时编译器的执行效率。基于 LLVM 测试集 test-suite 完成相关测试，验证了申威平台 LLVM 即时编译器的正确性。基于 SPEC CPU2006 基准测试集对申威平台的 LLVM 即时编译器进行性能评估，测试结果表明，经过指令选择优化后 C/C++ 测试程序平均运行时间减少了 $4.66\%$。
 
-换句话说，作者既要解决“能不能在申威上跑 LLVM JIT”，也要解决“跑起来之后够不够快”。
+关键词：申威处理器 LLVM 即时编译 编译后端移植 优化
 
-## 背景
+# Abstract
 
-LLVM 已经成为现代编译基础设施的重要组成部分，特别是在：
+Sunway series processors are domestic general-purpose processors with independent instruction sets and complete independent intellectual property rights. They have been successfully applied in many fields such as supercomputers, highperformance servers, storage systems, and network security. LLVM is widely adopted by commercial and open source projects as an open source compilation framework, especially its JIT (just-in-time) compilation system, which has become an infrastructure in the fields of big data and artificial intelligence. However, in the current software ecosystem of Sunway processors, the LLVM compiler framework has not yet been supported. Many projects developed based on LLVM cannot be migrated to the Sunway platform. Some information system infrastructures related to national economy and people's livelihood are facing potential security threats. The weakness of the software ecosystem further limits the application and promotion of Sunway processors, and it is urgent to introduce the LLVM compiler framework into the software ecosystem of Sunway processors. In addition, the JIT compiler has the characteristics of runtime compilation. The longer compilation time makes the JIT compiler run slower.
 
-- 大数据
-- 人工智能
-- 动态语言运行时
-- 数据库与浏览器引擎
+In response to the above problems, this thesis uses the compiler backend porting method to implement the Sunway processor backend and related components in LLVM, so that the Sunway processor supports LLVM and its JIT compilation system; and by optimizing the code generation process, reduce the time for program compilation, and the overall performance of the JIT compiler is improved. The main research contents of this thesis are as follows:
 
-等领域，JIT 已经非常常见。如果国产平台不能良好支持 LLVM，那么软件生态就会受到明显限制。论文因此把问题放在“自主可控软件生态”背景下讨论。
+(1) Designed and implemented the LLVM JIT compiler on Sunway platform. By analyzing and studying the implementation principle of LLVM JIT compilation, the basic composition of the JIT compilation system and the functional principles of each part, as well as the backend porting mechanism of the LLVM compiler architecture, combined with the characteristics of the Sunway processor, it was ported on the domestic Sunway platform, and LLVM JIT compilation was implemented.
+(2) Based on the instruction selection technology, the LLVM JIT compiler of Sunway platform is optimized. Based on the characteristics of the LLVM JIT compiler's compiled code at runtime and the problem that the instruction selection time is too long
 
-## 论文的核心工作
+in the LLVM backend code generation, the instruction selection process was adjusted and optimized to implement the fast instructions of the Sunway processor backend Options. By preferentially using the fast instruction selection scheme, the speed of instruction selection is improved to improve the overall performance of the JIT compiler to a certain extent.
 
-### 1. 分析 LLVM 即时编译框架
+This thesis implements the LLVM JIT compiler on the Sunway platform, and optimizes the code generation process to improve the execution efficiency of the JIT compiler. Based on the LLVM test-suite to complete the relevant tests, verified the correctness of the Sunway platform LLVM JIT compiler. Based on the SPEC CPU2006 benchmark test set, the performance evaluation of the LLVM JIT compiler of the Sunway platform was performed. The test results showed that the average running time of the C/C++ test program was reduced by $4.66\%$ after fast instruction selection optimization.
 
-论文先梳理了 LLVM 中三代 JIT 体系的发展：
+Key Words: Sunway processor, LLVM, Just-in-time compilation, Compilation backend porting, Optimization
 
-- 早期 JIT
-- MCJIT
-- ORC JIT
+# 目录
 
-然后重点分析 MCJIT 的执行过程，包括：
+摘要..
 
-- 引擎创建
-- 代码生成
-- 对象加载
-- 重定位处理
-- 地址映射
-- 运行时动态链接
+Abstract .. II
 
-作者认为，要在申威上支持 LLVM JIT，关键不只是后端能生成静态代码，还必须补齐 MC 层、对象输出和运行时动态链接等配套能力。
+目录... . IV
 
-### 2. 完成 SW64 后端移植
+1 绪论....
 
-论文基于 LLVM 后端移植机制，在申威 SW64 平台上实现了：
+1.1 课题背景..
+1.2 国内外研究现状. .3
+1.3 国产处理器生态与申威处理器的发展. 5
+1.4 论文主要研究内容..
+1.5 论文组织结构.. .8
 
-- 代码生成器相关支持
-- MC 层支持
-- 汇编输出能力
-- 可重定位目标文件输出
-- 运行时动态链接器相关支持
+2 即时编译技术概述 .10
 
-这样申威平台不仅能“静态编译”，还能支持 JIT 在运行时生成并装载代码。
+2.1 即时编译技术. .10
+2.2 LLVM 中的即时编译技术. 11
 
-### 3. 针对 JIT 做代码生成优化
+2.2.1 JIT 框架 . 12
+2.2.2 MCJIT 框架.. 13
+2.2.3 ORC JIT 框架.. 14
 
-论文指出，JIT 和 AOT 的优化目标不完全一样。AOT 可以接受更长的编译时间来换更高运行效率，而 JIT 编译时开销会直接吃掉程序运行时间，因此要特别关注“性价比最高”的优化环节。
+2.3 本章小结.. .15
 
-作者把重点放在指令选择阶段，原因是：
+3 MCJIT 分析.. .16
 
-- 在 LLVM 后端代码生成流程中，指令选择耗时占比较高
-- JIT 下这一开销会直接影响程序响应速度
+3.1 MCJIT 实现流程的分析. ..16
 
-因此论文为 SW64 后端实现了快速指令选择方案，目标是在略微牺牲部分最优性前提下，显著减少代码生成耗时。
+3.1.1 引擎创建 . .16
+3.1.2 代码生成 .. 17
+3.1.3 对象加载 . 18
+3.1.4 地址重新映射 .20
+3.1.5 应用重定位 . .21
 
-## 测试与结果
+3.2 MCJIT 移植模块的分析. ..22
 
-### 1. 正确性验证
+3.2.1 代码生成器 . .24
+3.2.2 MC 层 . ..26
+3.2.3 动态链接器 ..30
 
-论文使用 LLVM test-suite 对移植后的申威 LLVM JIT 做正确性验证。结果表明：
+3.3 本章小结.. .. 31
 
-- 常规测试能够通过
-- 说明 SW64 后端及其 JIT 支持整体可用
+# 4 申威平台 LLVM 即时编译器的设计与实现 . ..32
 
-### 2. 性能验证
+4.1 SW64 后端实现 MCJIT 的整体设计. ..32
+4.2 SW64 后端 MC 层的设计与实现 ..34
 
-论文使用 SPEC CPU2006 进行性能评估。文中给出的结果是：
+4.2.1 输出到汇编文本 .37
+4.2.2 输出到可重定位的对象文件. ..44
 
-- 在完成快速指令选择优化后
-- C/C++ 测试程序平均运行时间减少了 4.66%
+4.3 SW64后端运行时动态连接器的设计与实现. .. 49
 
-这个收益不算“颠覆式”，但对 JIT 场景来说很实际，因为它来自运行时编译路径上的真实优化。
+4.3.1 对象加载时期对重定位的处理. .49
+4.3.2 链接时期解析重定位. .50
 
-## 论文结论
+4.4 本章小结.. ..52
 
-作者总结的核心成果包括：
+# 5 即时编译优化 .53
 
-1. 把 LLVM 编译器及其 MCJIT 支持移植到申威 SW64 平台。
-2. 补齐了 MC 层、汇编器、运行时动态链接等关键组件。
-3. 基于指令选择实现了适合 JIT 场景的优化方案。
-4. 通过 test-suite 和 SPEC CPU2006 验证了正确性和性能收益。
+5.1 研究动机. .53
+5.2 快速指令选择.. ..54
+5.3 SW64 后端的快速指令选择实现. .. 56
+5.4 本章小结.. ..57
 
-同时论文也指出，后续仍可继续改进，例如：
+# 6 测试与分析.. ..58
 
-- 进一步完善 RuntimeDyld 对线程私有变量重定位的支持
-- 继续优化代码生成速度
-- 继续提升生成代码质量
+6.1 即时编译器的正确性测试.. ..59
 
-## 我的理解
+6.1.1 test-suite 测试套件 . .59
+6.1.2 搭建测试环境 . ..60
+6.1.3 测试与分析 . ..61
 
-这篇论文的价值在于，它不是泛泛谈“国产平台要做生态”，而是落到编译器里最难的一层：把 LLVM JIT 真正带到申威平台上。它解决的是生态建设中的“底层卡点”——没有 LLVM/JIT，很多现代软件框架就很难原生迁移。
+6.2 即时编译器的性能对比测试.. ..62
 
-从工程上看，论文的思路很务实：
+6.2.1 SPEC CPU2006 基准测试 . ..62
+6.2.2 测试环境的搭建 ...63
+6.2.3 测试与分析 .. ...65
 
-- 先把 JIT 跑起来
-- 再分析最耗时的代码生成环节
-- 最后做适合 JIT 特性的局部优化
+6.3 本章小结.. ..66
 
-这比一开始就追求激进优化更合理，也更符合基础设施建设顺序。
+7 总结与展望. .67
 
-## 论文原页图像（逐页保留，含全部图表）
+参考文献.. .69
 
-![第1页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-01.png)
-![第2页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-02.png)
-![第3页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-03.png)
-![第4页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-04.png)
-![第5页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-05.png)
-![第6页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-06.png)
-![第7页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-07.png)
-![第8页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-08.png)
-![第9页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-09.png)
-![第10页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-10.png)
-![第11页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-11.png)
-![第12页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-12.png)
-![第13页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-13.png)
-![第14页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-14.png)
-![第15页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-15.png)
-![第16页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-16.png)
-![第17页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-17.png)
-![第18页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-18.png)
-![第19页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-19.png)
-![第20页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-20.png)
-![第21页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-21.png)
-![第22页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-22.png)
-![第23页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-23.png)
-![第24页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-24.png)
-![第25页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-25.png)
-![第26页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-26.png)
-![第27页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-27.png)
-![第28页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-28.png)
-![第29页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-29.png)
-![第30页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-30.png)
-![第31页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-31.png)
-![第32页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-32.png)
-![第33页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-33.png)
-![第34页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-34.png)
-![第35页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-35.png)
-![第36页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-36.png)
-![第37页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-37.png)
-![第38页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-38.png)
-![第39页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-39.png)
-![第40页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-40.png)
-![第41页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-41.png)
-![第42页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-42.png)
-![第43页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-43.png)
-![第44页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-44.png)
-![第45页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-45.png)
-![第46页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-46.png)
-![第47页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-47.png)
-![第48页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-48.png)
-![第49页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-49.png)
-![第50页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-50.png)
-![第51页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-51.png)
-![第52页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-52.png)
-![第53页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-53.png)
-![第54页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-54.png)
-![第55页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-55.png)
-![第56页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-56.png)
-![第57页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-57.png)
-![第58页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-58.png)
-![第59页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-59.png)
-![第60页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-60.png)
-![第61页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-61.png)
-![第62页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-62.png)
-![第63页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-63.png)
-![第64页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-64.png)
-![第65页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-65.png)
-![第66页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-66.png)
-![第67页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-67.png)
-![第68页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-68.png)
-![第69页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-69.png)
-![第70页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-70.png)
-![第71页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-71.png)
-![第72页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-72.png)
-![第73页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-73.png)
-![第74页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-74.png)
-![第75页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-75.png)
-![第76页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-76.png)
-![第77页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-77.png)
-![第78页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-78.png)
-![第79页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-79.png)
-![第80页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-80.png)
-![第81页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-81.png)
-![第82页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-82.png)
-![第83页](pages/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/page-83.png)
+个人简历、在校期间发表的学术论文与研究成果. ..73
+
+致谢.. ..74
+
+# 1 绪论
+
+# 1.1 课题背景
+
+最早发布的 JIT(Just-in-time)编译器通常归因于 John McCarthy 在 1960 年对LISP 的研究，在他的开创性论文《Recursive functions of symbolic expressions andtheir computation by machine, Part I》中，他提到了在运行时翻译的函数，从而节省了将编译器输出保存到穿孔卡的需要[1]。另一个早期的例子是 Ken Thompson，他在1968年给出了正则表达式的第一个应用程序之一，用于文本编辑器QED中的模式匹配[2]。为了提高速度，Thompson 通过 JITing 在兼容时间共享系统上实现了与 IBM 7094代码的正则表达式匹配。1970年，Mitchell 开创了一种从解释中导出编译代码的有影响力的技术，他用实验语言 LC²实现了这一技术[3]。
+
+Smalltalk（c.1983）开创了 JIT 编译的新领域。例如，根据需要转换为机器代码，并将结果缓存以供以后使用。当内存变得稀缺时，系统会删除一些代码并在需要时重新生成它[4]。Sun的Self语言广泛地改进了这些技术，并且曾经是世界上最快的Smalltalk系统；达到优化过的C速度的一半，但完全使用面向对象的语言。
+
+JIT编译可以应用于某些程序，也可以用于某些功能，特别是正则表达式等动态功能。例如，文本编辑器可以将在运行时提供的正则表达式编译为机器代码以允许更快的匹配——这不能提前完成，因为模式仅在运行时提供。一些现代运行时环境依赖于 JIT 编译来实现高速代码，包括 Java 的大多数实现，以及Microsoft 的.NET Framework。类似地，许多正则表达式库具有正则表达式的 JIT编译，可以是字节码或机器代码。JIT编译也用于某些仿真器，以便将机器代码从一个 CPU架构转换为另一个CPU架构。
+
+JIT编译的一个常见实现是首先将AOT（Ahead Of Time）编译为字节码（虚拟机代码），称为字节码编译，然后将JIT编译到机器代码（动态编译），而不是解释字节码。与解释相比，这提高了运行时性能，代价是编译造成的延迟。与解释器一样，JIT编译器不断翻译，但是编译代码的缓存可以最大限度地减少在给定运行期间将来执行相同代码的延迟。由于只编译了部分程序，因此与执行前编
+
+译整个程序相比，延迟要少得多。
+
+由于 LLVM 编译器框架本身所具有的模块化程度高、优化性能强等优势，越来越多的项目采用 LLVM 作为编译工具，并广泛用于学术研究。苹果公司通过将 JavaScript 语言源程序转换成 LLVM IR(Immediate Representation，中间表示)代码并随后对其进行重量级优化，将 Safari JavaScript 引擎 Nitro 的速度提升了 $35\%$[5]。LLVM JIT 应用于 Numba，提高了 Python 解释器的性能[6]。同时，LLVM中的即时编译技术在许多实际工程应用中也取得了相当重要的优化成果。Michael Larabel 等人在 PostgreSQL 中通过 JIT 编译 SQL 查询，避免了通过Postgres 的解释器传递 SQL 查询，从而在 TPC-H 等数据库测试中，编译PostgreSQL 表达式的速度快了 $20 \%$ 以上，创建索引的速度甚至可以提高 $5\%\sim19\%$[7]。Baptiste Delporte 等人在 LLVM JIT 框架中执行想要优化的代码，然后识别值得优化的函数，最后发送优化的代码到 DSP，加速了程序的执行[8]；Baptiste Delporte等人利用 LLVM 的即时编译器 MCJIT，提出了一种语言无关的优化系统，提高了异构平台的计算能力[9]；Yu-Hsin Tsai 等人修改了 JNA(Java Native Access)源代码并将 LLVM JIT 编译器集成到 JNA 中以提高性能，他们的实验在调用具有不同类型和数量的参数的本机函数时实现了大约 $8 \%$ 到 $1 6 \%$ 的性能提升[10] 。MichalGregor 等人在遗传编程中使用基于 LLVM 的 JIT 编译，专注于尽可能快地执行演化程序，提高遗传编程的计算效率，减少了总执行时间[11]。
+
+当前，绝大部分软件均是由各种高级编程语言编写，再经过编译器将程序的源代码转换成目标平台的机器代码。机器代码的质量与编译器的优化能力密切相关，优秀的编译器可以生出高效的机器代码，从而充分发挥出处理器的计算能力。因此，在计算机领域中，编译器的构造原理及其优化技术扮演着非常重要的角色[12]。近 70 年来，编译器的设计一直作为计算机领域的热点问题而存在[13]。而编译优化技术是编译器设计中举足轻重的一部分[14]。通常，在编译器中的一个优化技术能够改善代码的性能，但是也存在可能性在某些输入的情况下非但没有提高反而降低了程序的性能，所以说部分优化是不可判定的[15]。
+
+LLVM 项目由伊利诺伊大学发起，目的是提供一种基于 SSA(static singleassignment，静态单赋值)的现代编译研究框架，能够支持任意编程语言的静态和动态编译[16]。目前，LLVM 已经发展成为一个由多个子项目组成的总体项目，是
+
+模块化、可重用编译器及工具链技术的集合，并且提供了全时优化策略[17-19]。由于 LLVM 架构优秀，有许多针对 LLVM 的开源项目，其中 polly 项目是针对代码优化的代表[20]。目前 LLVM 编译器框架仍处于不断完善阶段，一些用于生成高质量代码的平台无关或者平台相关的编译优化技术未被实现，或者现有的优化算法有待进一步优化改进[21]。
+
+LLVM JIT 在程序运行之前就会将代码翻译成机器码，其结合了 AOT 和解释执行的优势，它能够产生高效的机器码，并且具备足够的灵活性；并且保持了平台无关性，可以根据当前硬件情况实时编译生成本地机器指令。鉴于 LLVMJIT具有如此多的优势，以及诸多应用前景，在国产平台上实现 LLVM JIT具有重大意义。由于即时编译的编译时间需要占用运行时间，对于某些代码的编译优化不能完全支持，需要在程序流畅和编译时间之间做权衡；以及在很多情况下，JIT编译时间要长于 AOT编译时间。由此看来，在编译器设计中，降低JIT编译时间，提高JIT编译效率具有重要意义。
+
+# 1.2 国内外研究现状
+
+编译优化理论和优化技术是决定现代计算机发展的关键技术之一。优化编译器的发展推动着现代软件技术和先进的计算机系统结构的发展。在编译领域，文献[13]被誉为“龙书”，具有很高的权威性，书中不但介绍了编译器构造的基本原理和技术，还详细讲解了重要的优化技术，并推荐了一些编译器构造工具。文献[11]全面阐述了在编写一个真实的编译器时遇到的各种关键问题及解决方法，注重真实语言和真实体系结构的编译实现方法，注重对现代体系结构性能有重要影响的各种优化是本书的特点。文献[22]主要站在现在体系结构的角度上来探讨编译优化技术，特别是对向量化、并行化等优化做了非常好的综合。
+
+鉴于 LLVM 架构优秀、设计简洁、灵活和编程接口易用，2012 年 ACM 把最引人关注的软件系统奖颁给了 LLVM 研发团队[23]，这不仅促进了国内外对LLVM 编译框架的研究与完善扩展，还促成了许多基于 LLVM 开发的优秀开源项目。目前，LLVM 以每年两个大版本的速度进行更新，全球的 LLVM 研究者每年都会召开两次 LLVM 开发者大会（LLVM Developer Meeting），分享最新的基于 LLVM 的研究成果。
+
+目前国内也有许多高校在基于 LLVM 做课题，包括上海交通大学的课题组的 ARM 处理器后端的移植[24]，以及对多核DSP 的编译器及其并行编程模型的开发和研究[25]；哈尔滨工业大学课题组的 ARCA3 处理器后端的移植[26]，科学计算程序自动性能预测研究[27]；南开大学课题组的 TWIP 无线传感器处理器后端移植[28]；哈尔滨工程大学编译课题组在 LLVM 上做了许多工作[29-32]，编译优化方面有迭代间数据重用的研究[33]以及函数内联优化的研究[34]；中国科学技术大学课题组的基于 LLVM IR 的程序优化与程序变换方法的研究[35]；中国科学院对 LLVM 的指令并行调度与实现的研究[36]等；南京邮电大学课题组基于 LLVM研究了静态程序切片方法[37]；西安邮电大学课题组基于 LLVM Clang 实现了一个软件静态检测工具[38]；吉林大学课题组基于LLVM 设计了C 程序的动态数据依赖分析工具[39]；西安电子科技大学课题组基于CEGAR 的实现了 LLVM_IR 程序验证方法[40]，基于LLVM IR 实现了对动态符号执行中的程序插桩[41]；电子科技大学课题组实现了一个基于 LLVM IR 的插桩工具[42]；北京邮电大学课题组基于 LLVM IR 实现了一个缺陷静态分析工具[43]；龚丹，苏小红，王甜甜分析了Clang 编译平台的优势[44]；朱燕，衷璐洁设计了一种基于 LLVM 中间表示的数据依赖并行计算方法[45]；为有效解决静态程序分析中函数指针指向信息获取不够准确和库函数调用信息处理不够完善的问题，莫培弘，衷璐洁提出一种在LLVM 平台下静态程序信息的过程间分析方法[46]；吴泽智等人基于 LLVM 的即时编译技术优化了动态污点跟踪播优化方法[47]。
+
+国外也有许多团队在研究 LLVM 优化技术，Hal Finkel 等人提出了在程序的基本块中实现自动向量化的思想，并且在集成到 LLVM 中，主要方法是遍历基本块中所有的能合并成向量指令的指令对， 然后把这些指令对合并成一条向量指令（vector instruction），最终的好处是实现了代码对一些扩展指令集的应用，例如 X86 架构的 MMX，SSE*，3DNow 等指令集[48]。Duncan Sands 等人提出了一种针对 LLVM IR 的最优化代码方法（Super-Optimization），该方法目的不是使代码最优化，而是自动识别 LLVM 优化器错过的，但是还可以进行优化的代码[49]，例如：常量合并，把识别的结果提交给 LLVM 的优化器，重新进行代码的优化。Tobias Grosser 等人提出了名为 polly 的研究项目，它们利用多面体模型来实现数据局部性优化以及自动并行化和向量化[50]，这样就可以充分发挥
+
+多核、cache 的层次结构、向量指令以及专用处理器的优势。Gyeong Il Min 等人提出了一种编译器，它通过增加编译器反馈，为程序员提供了优化失败的原因，并识别程序员的附加信息以获得更好的优化。这种更方便的策略，通过不修改源代码但将补充信息附加到代码就获得了额外的优化机会[51]；Daniele Cono D’Elia等人提出了一个堆栈替换（OSR）框架，中断长时间运行的函数并以更高的优化级别重新编译它，OSR 成为动态语言的强大工具[52]；Shiyu Dong 等人研究了LLVM 中标准编译器优化对符号执行的影响[53]；Farah Hariri 等人研究了标准编译器优化如何影响在编译器中间表示中执行的突变测试的成本和结果[54]；DavidMenendez 等人为了解决创建正确的窥孔优化问题，开发了一种特定于域的语言，用于在 LLVM 中指定窥孔优化[55]；Yosi Ben Asher等人对现代编译器的优化冲突对进行了研究，对于特定的代码段，这些优化中的一部分可能会发生冲突，因此，一次优化可能会降低另一种优化所获得的性能增益。他们研究它们的相互作用，以便通过选择优化的优化序列（OSO）来设计解决此类案例如何解决的问题的解决方案[56]；Ansar K.A.等人研究了使用全局值编号来消除冗余的编译优化方法，以更少的计算生成更紧凑的对象程序，这最终将导致使用较少的计算资源，包括处理时间和内存[57]。
+
+# 1.3 国产处理器生态与申威处理器的发展
+
+中国自本世纪初开始进行处理器设计与研制，至今已经过去两个十年。目前国产处理器的代表主要来自中科龙芯、天津飞腾、上海申威、上海兆芯、海思麒麟等[58]，各自稳步迭代其处理器不仅使得性能逐步提高，而且应用到了更多的领域，包括超级计算、高性能服务器、航空航天、个人电脑、嵌入式、手机等。在超级计算领域，主要代表是基于飞腾处理器的“天河”系列超级计算机，以及基于申威处理器的“神威”系列超级计算机。在嵌入式领域，龙芯 1 号系列 CPU具有广泛的应用，不仅可以应用于工业控制等常规嵌入式场景，还能用于航空航天等特殊场景[59]，而龙芯 2 号系列 CPU 是龙芯 1 号系列 CPU 的加强版，主要面向桌面应用以及高端嵌入式应用。在个人电脑领域，主要是兆芯推出的X86架构“开先”系列处理器，最新的“开先”处理器性能已经接近或达到国际主流通用处理器性能，并且能够兼容 Windows 操作系统[60]。在手机处理器领域，海思
+
+麒麟推出的 ARM 架构“麒麟”系列处理器已经成功应用在中高端华为手机中，并且获得了不错的反响。在服务器领域，虽然各个国产处理器架构不同，但是均有涉及与应用，各个厂商均推出了自己的面向服务器的处理器。国产处理器在各个领域开花结果，这极大的化解了长期以来无“芯”可用的尴尬局面，并且为构建自主可控、安全可靠的国产计算平台奠定了基础。
+
+国产处理器已经取得了长足发展，但是依然面临一些困境。首先是生态环境，包括相关产业和软件两个方面，在产业方面主要是我国的集成电路自给率还比较低并且缺乏高端处理器芯片，在软件方面主要是短期内无法突破“Wintel”联盟中的软件垄断，需要更多的软件使用者来促进国产软件生态环境的构建与完善。其次是国产处理器的指令集架构（Instruction Set Architecture，ISA），多数国产处理器都是采用合作、授权的方式获得 CPU 的架构，仅有龙芯和申威构建了自己的技术体系，因此大多数国产处理器厂商都面临着专利壁垒，需要构建完全自主的体系结构。再次是相关的专业人才，硬件以及基础软件产业需要大量的专业人才以完成相关的管理和技术实现，而目前相关专业人才缺口巨大并且没有足够的团队从事基础软件的研究。最后是高端制造设备，CPU 代表人类最高智慧的结晶，其复杂程度不言而喻，CPU 的制造需要诸多工艺和精密仪器才能完成，高端制造设备的缺乏也深刻地影响了国产处理器的发展。
+
+为了解决国产处理器发展过程中面临的问题，国家出台了一系列政策方针推动国产处理器的可持续发展。除了将国产处理器列入机关的采购名录外，还举办相关赛事刺激学术界和产业界为国产处理器开发应用以培养专业人才，也通过抓住RISC-V的机遇来构建中国化的产业联盟。
+
+申威处理器是依托国家“863” 高新技术发展计划以及国家科技重大专项“核心电子器件、高端通用芯片及基础软件产品”（简称"核高基专项"）进行研究开发的国产处理器[61]，采用自主指令集、具有完全自主知识产权。经过十几年的发展与积累，至今已经研发了三代处理器核心，推出的数款芯片成功应用到了多个领域。基于第一代申威处理器核心的申威1单核处理器于2006年问世；基于第二代申威处理器核心的申威2双核处理器于2008年问世；基于第三代申威处理器核心的申威1600十六核处理器于 2010年问世并且在2011年成功安装在神威蓝光超级计算机上，其使用了8704片申威1600处理器，搭载了神威睿思操
+
+作系统，是中国首台软件和硬件全部国产化的超级计算机；随后基于改进型第三代申威处理器核心研制出了一系列处理器，包括双核申威 221、四核申威 421、十六核申威 1621，这些处理器是目前应用比较广泛的申威处理器型号，主要应用包括高性能服务器、网关与防火墙产品、数据存储与处理系统等；申威26010异构众核处理器成就了世界上首台峰值性能超过100P 的超级计算机，神威·太湖之光，申威26010单处理器包含4个主核以及256个从核共260个CPU核心，为神威·太湖之光超级计算机提供了强大的计算能力，使其连续四次登顶全球超级计算机500强榜单。
+
+申威自主可控软件生态系统采用“Linux 开源移植 + 自主研发”相结合的方式，和 Wintel 体系以及 X86-Linux 体系比较，申威软件生态系统在基础软件和部分应用软件上都有对应的自主软件产品，有力地支撑了申威处理器平台的产业化发展[62]。申威1621处理器是目前应用最为广泛的申威多核处理器，其应用在包括国产安全服务器、国产安全存储、国产集群计算机、高性能计算机、国产网络交换机、国产千兆防火墙、网络安全操作系统等各个方面，打造了申威安全平台的生态环境。当前，适配申威多核处理器的操作系统主要有中标麒麟、深度、神威睿思，已经集成基础编译器、运行时环境和 Java 支撑平台，具备了基础应用的开发、调试、部署、运行与维护的能力。对 LLVM 的支持将使申威处理器平台生态更加完善，进而获得更多的应用支持并提升产业化水平。
+
+# 1.4 论文主要研究内容
+
+目前国内外针对 LLVM JIT的编译优化研究还比较少，大多数的编译优化研究针对于AOT编译，这些成熟的编译优化理论和方法可以参考和借鉴，为我所用。大多数编译优化方法，重点考虑的是优化对时间和空间的影响。基于 LLVMJIT边编译边运行、编译时间需要占用运行时间的特性，需要在程序流畅和编译时间之间做出权衡，以及根据国产平台的硬件特性，最终生成编译时间短、运行速度较快的程序。
+
+一个具体的优化是否改善性能，在多数情况下是不可判定的。编译优化的方法有很多，但是并不是每一种优化都适用于 JIT编译，如尾融合，总是以牺牲时间来减少空间，像这样的优化是不值得去做的。有些简单的优化，如代数化简，
+
+只在极少数情况下才会使程序变慢。有一些优化比其它优化更重要，例如循环优化、全局寄存器分配和指令调度几乎总是实现高性能的关键[12]。本文最主要的工作就是寻找适合国产平台的“性价比最高”的优化方法，以提高其 LLVM JIT性能。
+
+在本文的相关工作之前，申威平台上还没有 LLVM 编译器，即 LLVM 编译器尚不支持申威处理器后端。本文首先分析与研究了 LLVM 即时编译的实现原理与机制，分析了 LLVM 后端移植的机制，尤其是集成汇编器，在此基础上将LLVM 编译器移植到申威平台，继而完成即时编译相关模块的移植支持 JIT 功能，接着结合申威处理器以及即时编译的特性进行了指令选择优化。最后，对移植的即时编译器进行了详细测试，确保移植工作的有效性。本文最终得到了申威平台上的 LLVM 即时编译器，以及一系列编译器相关工具。在本文的主要工作中，LLVM 的版本为 2018 年 9 月发布的 7.0.0 版本，后端目标是国产处理器SW1621。
+
+# 1.5 论文组织结构
+
+本论文的结构以及内容安排如下：
+
+第 1章，绪论。首先详细地介绍了即时编译技术的发展、LLVM 即时编译技术的应用现状以及研究课题的意义，其次分描述了国内外对 LLVM 编译器的研究情况，随后简单分析了国产处理器及其生态的发展现状，引出申威处理器并介绍了SW1621处理器的特性，最后是本文的主要研究内容以及组织结构。
+
+第2章，即时编译相关技术简介。首先简单介绍了常见的即时编译的实现，然后分析了 LLVM 中即时编译的发展以及各个即时编译框架的内在实现机理。
+
+第 3 章，MCJIT 分析。首先对 MCJIT 框架即时编译的实现过程进行分析，然后分析了MCJIT框架中与后端关系密切的功能模块。
+
+第 4 章，设计与实现。对 SW64 后端支持 MCJIT 进行了设计，给出了基于LLVM 的SW1621处理器后端移植实现 JIT的具体方法，主要包括移植独立代码生成器、集成汇编器、运行时动态连接器等内容。
+
+第 5 章，优化。针对 LLVM 即时编译的特性，对代码生成过程中的指令选择流程进行了优化，以求提升编译器代码生成的速度，从而提高即时编译的效率。
+
+第 6 章，测试验证。利用 LLVM 的测试框架 test-suite 以及其他基准测试框架，对移植后的 LLVMJIT系统进行了全面且完整的测试验证，确保移植的即时编译器满足“可用”的要求，并且判定指令选择优化的效果。
+
+第 7章，总结了全文的主要工作以及存在的不足之处，提出了后续可继续进行完善的内容和进一步的研究方向。
+
+# 2 即时编译技术概述
+
+本章首先简单介绍了现有的即时编译器技术，接着重点对 LLVM 的即时编译技术以及它的实现原理进行分析与介绍，为后续章节关于 LLVM 即时编译器的移植与优化做好铺垫工作。
+
+# 2.1 即时编译技术
+
+即时编译技术主要是针对以 Java[63] 、JavaScript、VBScript、Python[64] 、Ruby、MATLAB[65]等为代表的解释型编程语言，将高级语言编写的源代码编译成中间代码（通常是字节码），再由对应的虚拟机执行中间代码。虚拟机屏蔽了平台的差异，因此已编译的字节码文件可以跨平台运行。虚拟机逐行解释字节码，这导致了虚拟机性能的低下，为提高性能而将频繁解释的字节码编译为平台的机器码，从而产生了即时编译技术。
+
+频繁解释的字节码被称为“热点代码”，这种基于“热点代码”的即时编译技术结合了解释执行和编译执行两种技术，在解释执行基础上引进编译执行，综合了这两种执行方式的优点，以求程序的执行性能趋近以及达到甚至超越编译执行。采用JIT技术的程序可以在运行时动态检测目标硬件架构，有机会产生执行效率更高的可执行代码。JIT技术在虚拟机网络浏览器引擎中的应用使得它们不再只是逐行地翻译代码，也可以将部分函数或者代码块编译成高质量的可执行代码，保存在内存中供以后直接调用，不再重复地解释或编译，从而提高执行效率。采用这种基于“热点代码”的即时编译技术的虚拟机主要有JAVA虚拟机JVM（Java Virtual Machine）、Android 系统虚拟机 DVM（Dalvik Virtual Machine），Javascript 引擎（Chrome 浏览器的 V8 引擎、Firefox 浏览器的 SpiderMonkey 引擎、IE浏览器的Chakra）等。
+
+这种基于“热点代码”的即时编译原理如图2.1所示（以 JAVA为例）。程序以解释执行的方式开始执行，当检测到“热点代码”，则使用编译器将该“热点代码”编译成本平台的机器代码，再次翻译“热点代码”时，直接执行生成的本机代码以降低运行时间。在这种即时编译技术中，研究的重点是“热点代码”的识别以及探测。根据“热点代码”的粒度，JIT 可以分为两种：基于 Method 的
+
+JIT，以函数或者是方法作为“热点代码”的基本单位来编译；以及基于Trace的JIT，以路径（代码块）作为“热点代码”的基本单位来编译，这种方法其实包含了基于 Method 的 JIT。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/93cea5bc2f53056742d9981218a2fff58a1ee1d04bd4a8b05c21997d2c737c6d.jpg)
+图2.1 Java字节码执行流程
+
+通常，在虚拟机中，执行和编译分别位于不同的线程中。在程序执行时，存在单独的编译线程编译热点代码，而不会影响执行线程。
+
+# 2.2 LLVM 中的即时编译技术
+
+自 LLVM 首次发布至今（LLVM 10.0.0 已经发布），总共发布过 37 个大版本，其即时编译框架也经历了从第一代 JIT 框架到第二代 MCJIT 框架，再到第三代 ORC（On Request Compilation） JIT 的发展。通过对这三代即时编译框架
+
+的演进以及特性进行简单介绍，并且对其实现进行分析和研究。
+
+图 2.2 描绘了 LLVM 框架的典型组件以及如何利用它们来构建即时虚拟机平台。编译器前端 Clang 将用 C 语言编写的程序转换为 LLVM IR。LLVM IR 基于三地址SSA表示，适用于编译器目标无关优化，并且由 LLVM 优化器进行优化（可选的）。最后，（由执行引擎或者 JIT API）以函数为单位 JIT 编译成对应平台的机器码。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/d5170355d6f8090ade75ca0388ac5ee62171f42ac9dbad2283fdc11562961f9c.jpg)
+图 2.2 LLVM 及其组件作为即时编译器的典型用法
+
+# 2.2.1 JIT 框架
+
+在 llvm 发布的第一个版本 LLVM 1.0 中，便支持即时编译与字节码解释执行，此时JIT还存在许多问题，例如：由JIT 编译的符号上无法使用dlsym 进行符号解析，JIT不使用互斥锁来保护其内部数据结构以至于执行线程程序可能导致这些数据结构被破坏，无法在 JIT 中删除 LLVM 字节码文件。在 LLVM 后续的版本更新中，除了逐渐完善JIT的功能实现外，还对JIT框架的性能进行了优化，例如：使用互斥锁来保护 LLVM 内部数据结构，允许客户端将JIT给其代码缓冲区的机器代码解除分配，支持线程私有变量，支持迭代编译和调试信息的动态生成，支持更多的后端，延迟初始化全局变量以减少具有大量全局变量的程序的启动时间，减少链接到使用 JIT 的应用程序的代码量以缩小程序体积等。在LLVM3.4中，删除了对异常处理的支持，并且最终在 LLVM3.6中删除了JIT框架而被新的MCJIT框架所取代。
+
+传统的JIT框架支持惰性编译，并且默认采用惰性编译的方式，实现原理如图2.3所示。将函数调用发射为桩的调用从而实现函数的延迟编译。当首次调用Callee 时，执行 Callee 的桩 Callee_stub，记录 Callee_stub 的地址然后跳转到Callback，Callback 保留参数寄存器后调用 CallbackC 函数，用于解析 Callee_stub的地址为 Callee 函数的地址，即编译 Callee 函数，随后 CallbackC 修改 Callee_stub
+
+的内容，使得 Callee_stub 指向已编译的 Callee。Callback 恢复先前保留的参数寄存器后，跳转到新的 Callee_stub 中执行 Callee 函数。因此，在首次调用 Callee函数时，执行路径为 1-2-3-4-5-6-7-8-9。当再次调用 Callee 时，不需要再执行复杂的桩解析与编译过程，直接经过 Callee_stub 去执行 Callee 函数。此时，执行路径是 10-8-9。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/0fac69c7d49fa8fce9bca420083848c22466ce957c73795a71124ee4622b82b0.jpg)
+图 2.3 惰性JIT 编译实现原理
+
+# 2.2.2 MCJIT 框架
+
+在 LLVM3.0 中引进了基于 MC（Machine Code，机器代码）层支持的 MCJIT框架，加入 MCJIT API。支持 MCJIT 的后端使用 MC 汇编打印机。MCJIT 框架将对象文件直接发送到内存，并使用运行时动态链接器来解析引用并驱动延迟编译。MC-JIT 在 JIT 和 AOT 之间实现了更大的代码重用，从而提供了与平台ABI 更好的集成。在后续的版本中，逐渐完善 MCJIT 框架，实现了对内联汇编的支持，以及支持为远程目标生成代码，对异常处理的支持。相对于 JIT 框架，MCJIT框架带有JIT链接器的静态管道、更高效的代码和工具重用、支持跨目标JIT，但不支持延迟编译。
+
+MCJIT框架的工作方式如图2.4所示。首先将由内存中的 LLVM IR 组成的LLVMModule添加到 MCJIT执行引擎，触发模块或函数的编译时，MCJIT引擎通过后端的代码生成器编译整个模块，生成一种非常低级的中间代码，经过MC层将中间代码汇编生出对象文件，然后由运行时动态链接器加载对象文件并且进行链接并且返回函数地址，此时函数已经准备好执行。客户端可以通过执行引擎查询函数的入口地址。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/3e30b156e985a54955b5d7d6867173b6309b004f378ba4c5f0d80ce338b7b5d0.jpg)
+图 2.4 MCJIT 框架的工作方式
+
+# 2.2.3 ORC JIT 框架
+
+在 LLVM 3.7 中添加了一个名为 ORC 的新 $\mathrm { C } { + + }$ JIT API。ORC 是一个受MCJIT启发的新 JIT API，但设计为更易测试，并且更容易扩展新功能[66]。OrcJIT是在MCJIT框架基础上发展的产物，与MCJIT框架共用RuntimeDyld等基础模块，并且重新实现了 MCJIT 的 API（OrcMCJITReplacement）和行为。OrcJIR 支持惰性编译，在实现的思想上与第一代的JITAPI有许多相似之处，但更为复杂，引入了 COD 层（Compile On Demand Layer，按需编译层），主要针对解释器、REPL（Read Eval Print Loop，交互式解释器）等应用场景。LLVM 后续版本更新和扩展了 OrcJIT API，支持更多功能的同时还体现了诸多 MCJIT 框架不具备的新特性：支持自动内存管理，可以注册调试器和分析器等事件监听器实现更高的
+
+程序内部活动的可见性，高模块化与高可扩展性，最重要的是支持并发编译，其中包括新层接口和实现，以及新实用程序。
+
+ORCJITAPI具有许多特性，具体使用哪一种JIT方式可由用户来指定。对于高性能 JIT 和跨平台 JIT 的应用场景，ORC JIT 中的 OrcMCJITReplacement 执行引擎与 MCJIT 的实现原理相似，这里仅简单介绍惰性编译 orc-lazy 的实现原理。如图2.5所示，在函数Caller运行时，需要调用函数Callee，此时将跳转到为Callee发射的桩代码中，继而跳转到Callee的跳板代码中（Callee桩的目标地址为 Callee 的跳板），其中桩代码与跳板代码均由特定目标的 OrcAPI 发出，且每次写满一个内存页。从跳板转移到解析器中根据跳板的地址解析 Callee 的地址，从而触发Callee的编译，经过代码生成-编码-链接过程生成Callee函数的实际可执行代码，再执行真正的Callee函数。程序执行的路线为 1-2-3-4-5-6。当再次调用 Callee函数，Callee桩的目标地址已经被修改为 Callee的地址，此时的程序执行路线为1-7-6。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/78971d097fc3d51cdca2945e546b604cd688ce828fb9e7540dfbf34de7e3724f.jpg)
+图 2.5 Orc-lazy 实现原理图
+
+# 2.3 本章小结
+
+本章首先简单介绍了基于热点代码的即时编译技术。然后介绍了 LLVM 中的即时编译技术，介绍了 LLVM 编译器基础结构中即时编译执行引擎的发展与现状，描述了三代即时编译的具体实现原理。
+
+# 3 MCJIT 分析
+
+本章首先分析了 MCJIT 的实现流程，主要包括引擎构建、代码生成、对象加载、地址重新映射和应用重定位五个主要阶段，在每一个阶段 MCJIT 引擎都与后端息息相关。其中引擎构建器 EngineBuilder 完成构建执行引擎的任务，由代码生成器和MC 汇编器完成代码生成阶段，由运行时动态连接器RuntimeDyld完成对象加载、地址重新映射和应用重定位三个阶段。代码生成器、MC 汇编器以及RuntimeDyld 中的特定功能由后端目标实现，本章随后对这三个主要模块进行了较为详细的需求分析，为SW64后端实现MCJIT做准备。
+
+# 3.1 MCJIT 实现流程的分析
+
+# 3.1.1 引擎创建
+
+首先初始化目标，包括后端注册和创建后端的功能实例，执行引擎将为初始化的目标生成代码。在大多数情况下，使用EngineBuilder对象创建 MCJIT执行引擎的实例。EngineBuilder 将 llvm::Module 对象作为其构造函数的参数。客户端可以设置各种选项（包括是否将MCJIT作为要创建的引擎类型），随后通过构造函数传递给 MCJIT 引擎。如果客户端此时未显式创建内存管理器，则在实例化 MCJIT 引擎时通过 EngineBuilder::setMCJITMemoryManager 函数创建默认内存管理器 SectionMemoryManager。
+
+设置了选项之后，客户端需要调用 EngineBuilder::create 来创建 MCJIT 引擎的实例。如果客户端调用此函数时不使用TargetMachine参数，则将基于与用于创 建 EngineBuilder 的 模 块 关 联 的 目 标 triple 创 建 新 的 TargetMachine 。EngineBuilder 与各个功能模块的关系如图 3.1 所示。
+
+EngineBuilder::create 将调用静态 MCJIT::createJIT 函数，将其指针传递给模块，内存管理器，解析器和目标机器对象，所有这些对象随后都将归 MCJIT 对象所有。MCJIT 类有一个成员变量 Dyld，它包含一个 RuntimeDyld 包装类的实例。该成员将用于 MCJIT 与加载对象时创建的实际 RuntimeDyldImpl 对象之间的通信。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/9fe8d5432c03f6a12b71cef06779d26099d692313b271120f0dc728d7fdb7acb.jpg)
+图 3.1 EngineBuilder 与各功能模块的关系
+
+如图 3.2 所示，创建 MCJIT 执行引擎时，实例化 JITSymbolResolver 解析器Resolver，实例化 RuntimeDyld 运行时动态连接器 Dyld（将内存管理器和解析器的指针作为参数来初始化 Dyld）。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/6050ec6c06f83638c7fc2636033369aa46936985b4799fb6d4a908f260d1ec10.jpg)
+图 3.2 MCJIT 引擎创建结构图
+
+在创建时，MCJIT 保存一个指向它从 EngineBuilder 接收的 Module 对象的指针，但它不会立即为该模块生成代码。代码生成延迟到显式调用MCJIT::finalizeObject 方法或调用诸如 MCJIT::getPointerToFunction 之类的函数，这些函数或方法触发模块或函数的代码生成。
+
+# 3.1.2 代码生成
+
+当触发代码生成时，如果已设置启用 Cache 管理器，MCJIT 将首先尝试从其ObjectCache成员中检索对象将现有的对象文件加载到内存中，不需要再次编
+
+译模块。如果没有检索到缓存的对象，MCJIT 将调用其emitObject 方法，该方法使用 PassManager 实例并且创建一个新的 ObjStream 实例，两个实例传递给TargetMachine::addPassesToEmitMC 来初始化机器代码生成部件，包括汇编打印机、汇编器后端、MC代码发射器等，并且将相关Pass 添加到PM 中。最后调用PassManager::run 编译已添加的模块。
+
+如图 3.3 所示，调用 PassManager::run 使得模块经过代码生成器和 MC 汇编器生成完整的可重定位二进制对象（以ELF 或MachO或COFF格式，取决于目标），并且发送到 MemoryBuffer 对象。如果使用 ObjectCache，二进制对象也会传递给此处的 ObjectCache。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/2347377eb90cdbd780061bab472af9410fad2fd422fa552366ae7a206e75d120.jpg)
+图 3.3 MCJIT 框架中代码生成结构图
+
+此时，MemoryBuffer 包含原始对象。在执行代码之前，必须将此对象中的代码段和数据段加载到合适的内存中并且应用重定位，还需要设置内存代码区域的页面权限以及代码高速缓存无效处理。
+
+# 3.1.3 对象加载
+
+在将对象加载到动态链接器之前，需要根据从ObjectCache中检索到的或者从 MCJIT::emitObject 返 回 的 MemoryBuffer 创 建 对 象 文 件 ，object::ObjectFile::createObjectFile 根据 MemoryBuffer 创建一个 ObjectFile 实例，即对应格式的对象文件。ObjectFile 类解析二进制对象并提供对特定格式的头中包含的信息的访问，包括section，符号和重定位信息。
+
+如图 3.4 所示，MCJIT 将获得的对象文件传递给 RuntimeDyld 进行加载。
+
+RuntimeDyld 包装器类检查对象以确定其文件格式，然后创建 RuntimeDyldELF或 RuntimeDyldMachO 或 RuntimeDyldCOFF（三者都派生自 RuntimeDyldImpl 基类）的实例，并调用 RuntimeDyldImpl::loadObjectImpl 方法来执行实际加载。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/5554b18fa87ec9effeb14deec94fab869b6d4fa6826e14ae8e55d4df7510edc5.jpg)
+图3.4 对象加载结构图
+
+如图 3.5 所示，RuntimeDyldImpl::loadObjectImpl 首先遍历对象文件中的符号。收集有关弱符号（weaksymbols）和通用符号（commom symbols）的信息供以后使用。若发现有弱定义，则查找是否有相应的强定义，若找到强定义，则忽略该弱符号，否则将该弱定义作为强定义处理。对于每个函数符号或数据符号，相关的 section 被加载到内存中，并且符号存储在符号表映射数据结构中。迭代完成后，将为通用符号发出一个 section。
+
+接下来，RuntimeDyldImpl::loadObjectImpl 遍历对象文件中的各个 section，并为每个 section 迭代这些 section 的重定位。对于每个重定位，它调用特定子类的 processRelocationRef 方法来处理，该方法将检查重定位并将其存储在两个数据结构（基于section的重定位列表映射和基于符号重定位映射）之一中。
+
+最后，调用特定子类的finalizeLoad方法，完成指定 section的发射，并且记录 EH 帧 section。例如发射 GOT 段，该方法将调用内存管理器的allocateDataSection 方法分配特定大小的内存空间，然后创建 GOT 段的 section
+
+条目，并保存在 Sections 数据结构中。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/235574ada043b1c729740b3feadca790dc47c78eda0daebe96a83fd9d0192008.jpg)
+图3.5 实际的对象加载流程（创建符号表）
+
+当 RuntimeDyldImpl::loadObjectImpl 返回时，该对象的所有代码和数据sections 都将被加载到内存管理器分配的内存中，并且已经准备好重定位信息，但是尚未应用重定位并且生成的代码仍然是还没准备好被执行。
+
+# 3.1.4 地址重新映射
+
+在生成初始代码之后到调用 finalizeObject 之前的任何时间，客户端都可以重新映射对象中Section的地址。在为外部进程或者其他目标生成代码时通常需
+
+要这样做，并且映射到该进程的地址空间。在将Section内存复制到新位置之前，客户端通过调用 MCJIT::mapSectionAddress 重新映射 Section 地址。
+
+当调用 MCJIT::mapSectionAddress 时，MCJIT 通过其 Dyld 成员将调用传递给 RuntimeDyldImpl。RuntimeDyldImpl 将新地址存储在内部数据结构中，由于其他 sections 可能会更改，此时不会更新代码。
+
+当客户端完成重新映射 Section 地址时，需要调用 MCJIT::finalizeObject 来完成重映射过程。
+
+# 3.1.5 应用重定位
+
+当 调 用 MCJIT::finalizeLoadedModules 时 ， MCJIT 首 先 调 用RuntimeDyld::resolveRelocations。此函数将尝试定位任何外部符号，然后应用该对象的所有重定位，如图3.6所示。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/221ddb5dfb3d0e791ea8b4c798b4b784c3ee8854056f43304f898502339c3c70.jpg)
+图 3.6 应用重定位
+
+RuntimeDyldImpl::resolveExternalSymbols 首先使用符号解析器的 lookup 方法查找所有外部符号，符号解析器将返回所请求的符号在目标地址空间中的地址。然后，RuntimeDyld 将遍历它存储的与此符号关联的重定位列表，并调用resolveRelocationList 方法，该方法将通过特定格式的实现为已加载的 section 内存应用重定位。
+
+接下来，RuntimeDyld::resolveRelocations 遍历 section 列表，并为每个 section迭代已保存的重定位列表，然后调用 resolveRelocationList。此处的重定位列表中与重定位关联的符号位于与列表关联的 section 中。列表中的每一个位置都将具有即将应用重定位的目标位置，该位置可能位于不同的 section 中。
+
+实际的重定位解析由特定于目标的 resolve<Target>Relocation 方法实现，该方法由 resolveRelocationList 调用，为目标的每一个重定位修改加载在内存中的代码，使指针指向正确的内存位置。
+
+如上所述应用重定位后，MCJIT 调用特定的运行时动态链接器的registerEHFrames 方法。如果有需要注册异常处理帧的 section，则将该 section 的数据传递给内存管理器的registerEHFrames 方法，这允许内存管理器调用任何所需的目标特定函数，例如用调试器注册EH帧信息。
+
+最后，MCJIT 调用内存管理器的 finalizeMemory 方法。在此方法中，将最终权限应用于为代码和数据分配的内存页，如有必要，内存管理器将使目标代码缓存失效。至此，内存中的代码已准备好执行。
+
+# 3.2 MCJIT 移植模块的分析
+
+MCJIT框架的设计结构如图3.7所示。在 MCJIT框架下，以 LLVMIR 为输
+
+入，经过后端代码生成、MC 层汇编生成可重定位对象文件 Object，再经过运行时动态链接器 RuntimeDyld 的加载和链接，使得函数可以执行，并且返回可执行函数在内存中的地址。在整个 MCJIT 框架中，要使一个新的 LLVM 后端获得 JIT功能，需要对图中的各个部分（CodeGen、MC、RuntimeDyld）进行移植和实现。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/9e3837848f1b135d2185ee6b5fc06ab650f803a0b035cfc969807ae2d96f29fd.jpg)
+图 3.7 MCJIT 设计结构
+
+LLVM 编译器框架后端代码生成的流程如图3.8所示，图中忽略了其他的优化流程，只保留了部分关键的转换流程，所有的转换和优化流程都是以“pass”的形式插入到编译流程中，而这些优化 pass 不会改变编译对象的存在形式。LLVM 后端主要完成四个任务：指令选择、指令调度、寄存器分配和指令发射。并且 LLVM 在后端中使用了四种不同级别的指令表示：内存中 LLVM IR，SelectionDAG 节点，MachineInstr 和 MCInst。在代码生成阶段，将 LLVM IR 转换为 MachineInstr，而在代码发射阶段，则是将 MachineInstr 转换为 MCInst 实例，继而发射到汇编文本或者对象文件。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/976265a7dd2ccde86cc908df2801b1724eb06a23d1a614719fd3bfc6de8ec5aa.jpg)
+图 3.8 LLVM 后端编译流程
+
+# 3.2.1 代码生成器
+
+代码生成器是 LLVM 最复杂的部分之一，由一系列分析和转换 pass 组成。代码生成器的任务是将相对高级、目标无关的 LLVM IR 降级到低级的、目标相关的“机器指令”（MachineInstr）。此转换管道由后端的不同阶段组成，这些阶
+
+段主要包括指令选择、DAG 调度、寄存器分配、指令调度。完成这些阶段任务的Pass 是对后端成功至关重要的一组 pass。而除此之外，还有其他一些Pass 对于提高生成代码的质量更为重要。
+
+• 指令选择阶段将内存中的 IR 表示转换为特定于目标的 SelectionDAG 节点。最初，此阶段将 LLVM IR 的三地址结构转换为 DAG（Directed Acyclic Graph，有向无环图）形式，并且会经历一系列的标量与向量的DAG合并、（操作数）类型合法化、DAG（操作）合法化等过程。每个 DAG节点能够表示单个基本块的计算，这意味着每个基本块与不同的DAG相关联。通常节点表示指令，边缘的连接线表示它们之间的数据流的依赖性，但不限于此。使用 DAG 的转换对于LLVM 代码生成器库采用基于树的模式匹配指令选择算法很重要，这些算法通过一些调整也可以在DAG上工作（不仅仅是树）。到此阶段结束时，DAG将其所有 LLVM IR 节点转换为目标机器节点，即代表机器指令而非 LLVM 指令的节点。
+• 在指令选择之后，已经确定将使用哪些目标指令来执行每个基本块的计算。这是在 SelectionDAG 类中编码的。但是，需要返回三地址表示来确定基本块内的指令顺序，因为DAG并不意味着在不依赖于另一个的指令之间进行排序。指令调度的第一个实例，也称为预寄存器分配（Pre-register Allocation）调度，尝试尽可能多地探索指令级并行性对指令进行排序，将指令转换为 MachineInstr 三地址表示。经过此阶段的调度之后，DAG被发射为SSA形式的MachineInstr序列。
+• LLVM IR 具有无限的寄存器，在到达寄存器分配之前，这一特性得以保留。在寄存器分配阶段，寄存器分配器将MachineInstr 序列中无限的虚拟寄存器转换为一组有限的特定目标寄存器，即映射到目标机器的物理寄存器上，并在需要时生成溢出（spill）。此阶段将打破中间表示的 SSA形式。
+• 第二个指令调度实例，也称为后寄存器分配调度。由于此时可获得物理寄存器信息，因此可以使用与某些类型的寄存器相关联的额外危险和延迟来改善指令顺序。
+• 最后，为每一个函数完成函数帧布局，保存被调用者保存的寄存器，为函数插入序言代码和结尾代码，并且完成目标相关的伪指令（包括原子操作指令）
+
+展开。此时的 MachineInstr 序列中不再有目标无关的指令，每一条 MachineInstr都与后端的一条汇编指令进行对应。代码生成器的任务到此完成。
+
+LLVM 支持广泛的后端目标，而所有的后端共享一个公共接口，该公共接口是目标无关的代码生成器的一部分，通过通用 API 抽象出后端任务。每个目标必须实例化代码生成器通用类，以实现特定目标的行为。
+
+使用 LLVM 编译器后端为特定机器生成代码，需要实现对特定后端的相关移植接口（包括目标机器全局接口、目标机器寄存器描述与接口、目标机器指令集描述与接口、目标机器指令选择接口）。此外，为了实现代码发射（汇编文本输出或者可重定位对象文件输出），还需要为该后端实现代码发射接口。
+
+# 3.2.2 MC 层
+
+代码生成器输出的 MachineInstr 指令，经过后端的 MCInstLower 接口转换为MCInst 指令，即完成 MI指令的降级。将MCInst 指令传递到MC 层，在这里完成目标代码发射，即生成目标文件或者文本形式的汇编文件。
+
+在 MC 出现之前，LLVM 已经是一个成熟的编译器系统，它在许多不同的目标和子目标上都支持静态编译（通过普通的汇编器）和 JIT编译（将已编码的指令字节直接发送到内存）。然而，尽管具有这些功能，这些子系统的实现却设计得并不完美。LLVM 的MC 子项目解决了汇编，反汇编，目标文件格式处理以及 CPU 指令集级工具在其中工作的其他相关领域中的一系列问题。与没有紧密集成的汇编级工具的其他编译器（例如GCC 编译器，具有单独的汇编器 as）相比，它具有许多优点。将一个汇编器直接集成到编译器中，除了更加优雅之外，这样做会解决许多问题：对于快速编译，编译器生出大量格式化的汇编文本文件，然后调用汇编器执行汇编过程，汇编器不得不对该文件中的汇编指令进行词法解析、语法解析、有效性验证，这是非常耗时的，而且汇编打印本身也非常耗时。实际上，Clang编译器执行速度很快，在- $\cdot 0 0 \mathrm { - g }$ 编译C 代码时，调用外部汇编器花费的时间大约占总编译时间的 $20 \%$ 。除了要获得这种性能提升外，不依赖外部汇编器还可以有效避免语法相似但实际上不一致而导致错误的问题。
+
+MC 层的出现，使得 LLVM 成为一个更大的工具链，可以处理指令的汇编和反汇编任务。并且，当一个目标出现新的指令集扩展时，不需要将新指令同时
+
+添加到汇编器、反汇编器和编译器中。只需要将新的指令集扩展添加到后端的指令描述文件中，即可同时获得全部的汇编器、反汇编器和编译器后端支持。
+
+MC 层用于在原始机器代码级别上表示和处理代码，没有诸如“常量池”，“跳转表”，“全局变量”之类的“高级”信息。在 MC 层，LLVM 处理目标文件中的标签名称，机器指令和 Section 之类的内容。MC 层中的代码用于许多重要目的：代码发射器使用它编写.s 或.o文件，并且llvm-mc工具还使用它来实现独立的MC 汇编器和反汇编器。
+
+可以将与MC 相关的数据结构和组件分解为“操作指令的”和“操作其他内容的”两种类型。为了提供一致的抽象，引入了新的MCInst 类来表示具有操作数（例如寄存器，立即数等）的指令，MCInst 类是一个指令的目标无关表示，是一个比 MachineInstr 更简单的类，其中包含特定于目标的操作码和 MCOperand的向量。MCOperand 是以下三种情况的简单区分的并集：1）简单立即数； 2）目标寄存器 ID； 3）符号表达式作为MCExpr。“其他内容”包括各种类，例如MCSymbol（代表.s 文件中的标签），MCSection，MCExpr 等。
+
+MC 层结构如图3.9所示，整个 MC 层集成了指令打印机、指令编码器、反汇编器（指令解码器）、汇编解析器，这几个组成部分使得指令以MCInst 序列、对象文件、汇编文本三种格式可以相互转换。MCInst 是用于在 MC 层机器指令的通用表示，是指令编码器、指令打印机使用的类型，以及汇编解析器和反汇编器生成的类型。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/a432d5bf981bcf5b30aacf3ccad7da6de525b50e01290d704c15f879caab219c.jpg)
+图3.9 MC 层的各部分之间的数据联系
+
+# （1）指令打印机
+
+指令打印机是一个非常简单的特定于目标的组件，它实现了 MCInstPrinterAPI。给定一个 MCInst，它将格式化该指令并将其汇编文本表示形式发送到raw_ostream。MCInstPrinter 对 Section，指示符或类似的东西一无所知，因此它们独立于目标文件格式。
+
+指令打印需要正确格式化所有操作数，处理各种指令的语法不一致问题等，LLVM 已经有了TableGen后端，该后端可以从.td文件中自动生成很多内容。一个 LLVM 目标要支持此特性，需要引入 MachineInstr- $\mathrm { . > }$ MCInst 降级 pass，然后将 MCInst 传递给 InstPrinter。
+
+# （2）指令编码器
+
+指令编码器是另一个特定于目标的组件，该组件将MCInst 转换为一系列字节和重定位列表，从而实现 MCCodeEmitter API。该 API非常通用，允许将生成的任何字节写入 raw_ostream。RISC 目标的编码器将直接从.td 文件生成，当由编译器使用时，使用与指令打印机相同的MachineInst- $\mathrm { . > }$ MCInst 降级代码。
+
+# （3）指令解码器
+
+指令解码器实现了 MCDisassembler API，并将一系列字节（由 MemoryObjectAPI实现，用于处理远程反汇编）转换为MCInst。与前面的组件一样，目标可以实现多个不同的解码器。解码器将立即数字段转换为简单的整数立即数操作数，如果存在对符号的引用，则表示该符号的重定位必须由解码器的客户端处理。
+
+# （4）汇编解析器
+
+汇编解析器处理.s 文件中的所有指示符和其他内容，而不是指令（可能是通用的，也可能是特定于目标文件的）。汇编解析器解析“.word”、“.globl”等汇编指示符，并且它使用指令解析器来处理指令。汇编解析器的输入是一个MemoryBuffer 对象，该对象包含输入文件，并且汇编解析器为它所做的每件事都需要调用MCStreamer接口进行操作。
+
+MCStreamer 是一个非常重要的 API：本质上是一个“汇编器 API”，每个指
+
+示符具有一个虚方法，一个带有 MCInst 参数的“EmitInstruction”方法。MCStreamer API 由 MCAsmStreamer 汇编打印机（实现将这些指示符打印到.s 文件并使用指令打印机格式化MCInst 的支持）以及汇编器后端（输出.o文件）实现。从图 3.9 中可以看出，MCStreamer API 将整个 MC 层的各个组件联系在了一起。
+
+# （5）指令解析器
+
+为了在读取汇编文本文件时解析指令，每个目标需要为其特定语法实现词法分析器和语法分析器（lexer 和 parser），以提供 TargetAsmParser API。词法分析器是很大程度上基于通用的汇编语法特性（例如，什么是注释字符）进行参数化的共享代码，但是语法分析器都是特定于目标的。指令操作码及其操作数被解析后，将经历“匹配”过程，该过程决定要指定具体哪个指令。匹配完成后，指令被转换为MCInst 的形式。
+
+已解析指令的输出是“操作码 + 操作数列表”，并且语法分析器还公开了用于匹配的API。并非所有指令都可以从汇编文本文件中解析时匹配（例如，立即数的大小可能取决于两个标签之间的距离），因此可以将指令以比 MCInst 更抽象的表示形式保存，直到必要时执行放松（relaxation）为止。
+
+# （6）汇编器后端
+
+汇编器后端是 MCStreamer API 的一种实现（以及“MCAsmStreamer”文本汇编代码发射器），该程序实现了汇编器执行的所有“艰巨任务”。例如，汇编器必须执行“松弛 relaxation”过程，该过程处理诸如分支缩短之类的情况，诸如“此指令的大小取决于这两个标签之间的距离，但是该指令在两个标签之间，我们可以打破周期吗？”等等。它将段划分为多个节，将具有符号操作数的指令分解为立即数，并将此信息传递给对象文件特定的代码，该代码输出ELF或MachO或COFF格式对象文件。
+
+# （7）编译器集成
+
+LLVM 已经将所有这些组件都集成到编译器中，这使编译器直接与
+
+MCStreamer API 对话以发出汇编指示符和指令，而不是发出汇编文本文件。主要内容包括转换所有目标，调试信息，EH发射等，解决了AsmPrinter实现中许多主要设计问题，并且可以直接使用MCSection和MCSymbol之类的MC构造，而不必传递字符串并使用其他临时数据结构。
+
+编译器后端现在调用相同的MCStreamer接口以发出独立于汇编解析器所执行的代码。使用编译器后端（使用“MCAsmStreamer”）发出汇编文本文件并使用汇编解析器读回该文件与代码生成器直接调用它们时产生相同的 MCStreamer调用，如图3.9所示。
+
+# 3.2.3 动态链接器
+
+LLVM IR 模块经过代码生成和 MC 层汇编，会在内存中生成机器码。如果将此机器码写入硬盘，就可以得到目标平台对应的对象文件。但 MCJIT 不会将机器码写入硬盘，而是将其保留在内存中，并且由运行时动态链接器RuntimeDyld 进行动态加载与动态链接，将机器码转化为可执行代码块。客户端可通过执行引擎查询接口获得可执行代码块的函数地址，并执行函数。
+
+动态连接器主要完成对象文件的加载、符号地址的获取、符号表的构建、符号的重定位解析、代码与数据Section的分配（内存管理）、Section地址的映射、异常处理帧的注册与清理等任务。
+
+图 3.10 说明了每个类与其他类之间的关系，其中实心箭头表示继承。RuntimeDyld 是 RuntimeDyldImpl 的包装器类，RuntimeDyldImpl 是实际的类，RuntimeDyld 只是公共接口，RuntimeDyld 的绝大多数操作实际上都是由RuntimeDyldImpl 来完成。根据对象文件的格式，RuntimeDyldImpl 又派生出三个子类（RuntimeDyldELF、RuntimeDyldCOFF 和 RuntimeDyldMachO），主要执行对象文件格式重定位相关的操作，这部分内容与各个后端目标的体系结构密切相关。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/55c1bac5589318257d37e090ec2ce4fa5e015705ab61f4121054cd74c3462d50.jpg)
+图 3.10 RuntimeDyld 结构
+
+# 3.3 本章小结
+
+本章首先分析了 MCJIT 的整体实现流程，描述了 MCJIT 执行引擎和RuntimeDyld组件的内部工作方式，作为其实现的高级概述，显示整个代码生成和动态加载过程中对象的流程以及交互。然后分析和简单介绍了 MCJIT 框架中与后端相关的关键功能模块，包括代码生成器、MC 层、运行时动态链接器。
+
+# 4 申威平台 LLVM 即时编译器的设计与实现
+
+目前，已经有许多人完成过 LLVM 的基本的后端移植，而对于 MC 层的移植，以及其MCJIT框架的运行时动态连接器RuntimeDyld移植工作还相对较少。在分析了MCJIT框架各个部分的功能的基础上，确定了SW64 后端支持MCJIT所需要完成的工作。本章首先对 SW64 后端支持 MCJIT 进行了整体设计，然后对SW64后端的功能模块 MC 层和运行时动态链接器进行了设计与实现。
+
+# 4.1 SW64 后端实现 MCJIT 的整体设计
+
+图 4.1展示了一个完整的 LLVM 后端所需要具备的功能模块。从结构上，包括代码生成器、MC 层和 JIT支持三部分。从功能上，代码生成器主要是将 LLVMIR 转换成目标相关的 MachineInstr指令序列，MC 层主要完成汇编、反汇编、汇编打印、汇编解析等功能，JIT支持主要实现后端的即时编译功能。在MCJIT框架中，MC层主要体现其完整的汇编器功能，而JIT支持部分则包含了执行引擎、内存管理器、动态链接器等基础组件。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/6116e6ab68619b16d2aa45a49ef9bdc5dda72767aa063958b7d7ac8550a09a7e.jpg)
+图 4.1 完整的 LLVM 后端模块结构
+
+如图4.1(a)所示，后端代码生成器主要包含目标机器的全局描述、指令集描述、寄存器描述、帧栈布局、指令选择、子架构支持部分。这些工作主要是根据目标机器的属性定义寄存器集、指令集格式、数据的格式、调用约束等信息，对于无法使用TableGen语言定义已上信息的部分以及LLVM预留需要后端处理的
+
+接口，需要手工编写 $\mathrm { C } { + + }$ 代码。
+
+文献[24][26][28][67-70]已经在 LLVM 上完成了许多移植工作，他们主要是实现一个支持特定后端的代码生成器。在本文的工作开展之前，SW64后端代码生成器的移植工作已经基本完成，这是本文工作的基础，因此，本文不会有过多的代码生成器移植的相关内容，本章将主要对图 4.1 中所示的 MC 层、JIT 支持中的运行时动态连接器 RuntimeDyld 两部分进行移植与实现。
+
+一个 LLVM 后端实现 JIT 功能，需要在 MC 层生出正确的可重定位对象文件，具体到SW64后端，至少需要实现以下内容：
+
+1）为 SW64 目标实现 AsmPrinter 的子类。SW64AsmPrinter 类实现将MachineFunction 转换为 MC 标签构造的一般降级过程。
+2）实现一个从 MachineInstr 到 MCInst 的降级 pass，将 MachineInstr 降级为MCInst，然后将 MCInst 传递给 SW64AsmPrinter 接口进行指令编码（也可以输出到汇编文本）。
+3）实现特定于 SW64 目标的 MCTargetStreamer 实例，SW64TargetStreamer，用于实现MCStreamer 特定于SW64目标的接口，完成发射汇编指示符等任务。
+4）实现指令编码器，即特定于 SW64 后端的 MCCodeEmitter 接口，SW64MCCodeEmitter 完成从 MCInst 到二进制指令的转换。
+5）实现一个汇编器后端，MCAsmBackend 的实例 SW64AsmBackend，用于处理二进制指令的重定位修正。
+6）实现一个 MCELFObjectTargetWriter 实例，SW64ELFObjectWriter 完成对象文件的输出（系统支持ELF格式文件）。
+7）可选的：实现一个 MCTargetAsmParser 实例，即后端的汇编解析接口SW64AsmParser，用于处理在程序源代码中存在内联汇编的情况，MCJIT框架支持内联汇编正是因为如此。
+8）最后，将以上实现内容进行集成，集成到相应的库中。
+
+在 MCJIT 框架下，一个后端实现 JIT 功能，需要编写自定义代码实现运行时 动 态 连 接 器 RuntimeDyld 的 特 定 功 能 ， 即 需 要 实 现 一 个 自 定 义RuntimeDyld<File Format><Target>接口。事实上，ELF 文件格式如此通用，几乎各个目标架构都会支持 ELF 格式的文件，只需要将后端的自定义代码添加到RuntimeDyldELF 类中即可。无论采取哪种方式，主要是需要完成：
+
+1）在对象加载阶段，需要处理重定位以构建符号表，即实现特定于目标文件格式的 processRelocationRef 方法。
+2）在应用重定位阶段，需要正确解析已加载到内存中的二进制代码中的每一个重定位，使得符号引用指向正确的内存地址，即实现特定于目标文件 格 式 的 resolve<Target>Relocation 方 法 ， 或 者 在 自 定 义 接 口 重 写resolveRelocation 方法。
+
+对于 SW64 后端，由于和其他支持 ELF 格式的后端在链接过程中对重定位的处理流程如此相似，创建 RuntimeDyldELFSW64 接口是没有必要的。因此，只要将对SW64处理的代码添加到RuntimeDyld接口中即可。具体地，主要是为RuntimeDyldELF 修改 processRelocationRef 方法和添加 resolveSW64Relocation方法。
+
+# 4.2 SW64 后端 MC 层的设计与实现
+
+整个 MC 集成汇编器主要完成了从 MachineInstr 降级到 MCInst，MCInst 编码二进制指令以及输出对象文件这三个阶段的工作。MC 层的移植接口主要包括了代码发射接口、MI 降级接口、目标数据流输出接口、汇编指令打印接口，基本汇编属性接口、指令编码接口、对象文件输出接口以及汇编器后端等接口。
+
+为实现 SW64 后端的集成汇编器，首先需要完成 MC 层相关接口信息的创建和注册。主要包含相关的类、数据接口以及把 MI 序列转换为 MCInst 的函数等，整体设计如图4.2所示。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/acc1a941f04e862926817f82c7aacbc1f23764f6eb74c5dd82ad74218f00bfee.jpg)
+图4.2 MC层接口信息的整体设计
+
+各个接口的具体功能如下所述：
+
+（1） 接口 LLVMInitializeSW64Target，在文件 SW64TargetMachine.cpp 中实现。功能是注册 SW64 后端目标，同时可以初始化一些特定于目标的自定义 Pass。
+（2） 接口 LLVMInitializeSW64Targetlnfo，在文件 SW64Targetlnfo.cpp 中实现，其作用是注册SW64体系结构的信息。
+（3） 接口 LLVMInitializeSW64AsmPrinter，在文件 SW64AsmPrinter.cpp 中实现。其功能是注册SW64 目标的汇编打印机。
+（4） 接口 LLVMInitializeSW64AsmParser，在文件 SW64AsmParser.cpp 中实现。功能是注册SW64目标的MC 汇编解析器。
+（5） 接 口 LLVMInitializeSW64Disassembler ， 在 文 件
+
+SW64Disassembler.cpp中实现。功能是注册SW64目标的MC反汇编器。
+
+（6） 接口 LLVMInitializeSW64TargetMC，在文件 SW64MCTargetDesc.cpp中实现。通过对函数 LLVMInitializeSW64TargetMC 的调用来对 SW64 进行体系结构相关的MC 层组件注册。这个函数会调用其他的函数（主要是 TargetRegistry::RegisterXXX 函数和 createSW64XXX 函数），来完成对 SW64 后端 MC 层不同功能的部分进行注册。此函数通过定义在TargetSelect.h 中 LLVMInitialize##TargetName##TargetMC 的函数在通过宏定义来初始化。
+（7） 接口 createSW64MCAsmInfo，在文件 SW64MCTargetDesc.cpp 实现。其功能是为 SW64 目标创建一个 MCAsmInfo 实现，用于表示特定于目标的汇编属性和功能。
+（8） 接口 createSW64MCInstrInfo，在文件 SW64MCTargetDesc.cpp 实现。其功能是创建SW64 目标MC 层的指令集信息。
+（9） 接口 createSW64MCRegisterInfo，在文件 SW64MCTargetDesc.cpp 实现。功能是创建 SW64 目标 MC 层寄存器集的信息。
+（10） 接口 createSW64MCSubtargetInfo，在文件 SW64MCTargetDesc.cpp 实现。功能是创建SW64目标MC 层的子目标信息。
+（11） 接口 createSW64AsmBackend，在文件 SW64 AsmBackend.cpp 中实现。功能是创建一个SW64目标的汇编器后端。
+（12） 接口 createSW64MCInstPrinter，在文件 SW64MCTargetDesc.cpp 实现。其功能是创建SW64的指令打印机。
+（13） 接口 createSW64MCCodeEmitter，在文件 SW64MCCodeEmitter.cpp实现。功能是创建 SW64目标MC 层的代码发射器。
+（14） 接口 createSW64AsmTargetStreamer，在文件 SW64MCTargetDesc.cpp实现。作用是为SW64后端创建Asm 目标流。
+（15）接口createMCStreamer，其功能是根据不同的操作系统，创建不同的MC 层的输出流，SW64 后端支持 ELF 格式，因此创建了SW64ELFStreamer。
+（16） 接口 createSW64ELFObjectWriter，在文件 SW64ELFObjectWriter.cpp
+
+实现，作用是处理输出的 ELF 格式对象文件。
+
+# 4.2.1 输出到汇编文本
+
+LLVM IR 经过代码生成器后，转换为MachineInstr，然后下传到后端的代码发射器：可以生成二进制的对象文件，也可以生成文本形式的汇编文件。在这个阶段，主要需要实现代码发射、MachineInstr 降级、目标流输出、MC 汇编信息、指令打印这五个接口。
+
+# 4.2.1.1 代码发射接口的设计与实现
+
+代码发射接口 SW64AsmPrinter，在文件 SW64AsmPrinter.cpp 中实现。设计如图 4.3 所示，SW64AsmPrinter 是 AsmPrinter 的子类，作为一个 Pass，添加在所有代码生成Pass 的最后。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/cf19b03710089aeffeac6512068a9f4e19b85e74ec38576c5a5cfdfbed40d827.jpg)
+图 4.3 代码发射接口的设计
+
+其中，SW64AsmPrinter 类提供了以下接口：
+
+（1）runOnMachineFunction，作为每一个 MachineFunctionPass 子类的入口函数，也是指令发射的入口函数。LLVM 代码生成器以函数为单位编译模块，因此，每编译一个函数，就会调用此函数一次。根据上层函数传递过来的MachineFunction 参数，调用 getInfo 函数获得要发射函数的信息，并通过getConstantPool 获得常量池的位置。其次，处理特殊指令的地址对界。最后调用AsmPrinter::runOnMachineFunction，并返回。
+（2）EmitStartOfAsmFile，用于在输出汇编文本时，在文件的头部插入特定的指示符信息。
+（3）EmitFunctionBodyStart，用于初始化函数内容，并且发出标签以标记函数的开始。
+（4）EmitFunctionBodyEnd，发出标签以标记函数结束。
+（5）EmitInstruction，此函数功能是发射一条具体的 MachineInstr 指令，每一条要发射的MachineInstr指令都调用到这个函数。首先对调试信息等特殊的指令进行处理，对于常规指令，则先调用SW64MCInstLower接口的 Lower函数对MachineInstr进行降级，获得对应的MCInst，之后发射到具体的数据流中。
+（6）getTargetStreamer，确定当前输出文件的类型，汇编文本或对象文件。
+（7）PrintAsmOperand，打印内联汇编指令中的操作数到汇编输出流，当LLVM IR 中含有内联汇编指令并且输出为对象文件，代码发射时首先将该指令打印成汇编指令，再使用后端的汇编解析器将汇编指令转换成MCInst指令表示。
+（8）PrintAsmMemoryOperand，打印内联汇编指令中的内存操作数到汇编输出流。
+
+编写 SW64AsmPrinter.cpp 文件，首先包含必要的头文件，然后创建继承AsmPrinter 类的 SW64AsmPrinter 类，声明该类具有图 4.3 所示的方法，最后根据各个方法的具体功能以及 SW64 后端的特性编写实现代码，完成代码发射接口的移植。
+
+# 4.2.1.2 MI降级接口的设计与实现
+
+MI 降级接口 SW64MCInstLower，其功能是将 MachineInstr 转换为 MCInst，设计如图4.3所示。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/782296cd5872d3da06ef02e84834ebb124a273db7f1d5b0cf6c553b98c1c0149.jpg)
+图 4.3 SW64MCInstLower 的结构
+
+MI降级的流程如图4.4 所示。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/97b11e4396f3d779c1153bd19d92bb2836ab3365135885deb8d2a1cc76bfbbc6.jpg)
+图 4.4 MI 降级流程
+
+首先编写头文件 SW64MCInstLower.h，对头文件进行宏定义并且包含必要的依赖头文件，对 SW64MCInstLower 类进行声明，具有成员 MCContext、AsmPrinter 以及图 4.3 所示的方法。然后编写实现文件 SW64MCInstLower.cpp，包含 SW64MCInstLower.h 等头文件，并且对 SW64MCInstLower 类的方法编码实现：
+
+（1）Initialize，为 MCContext 和 AsmPrinter 赋值。
+（2）Lower，MI 降级的入口函数，该函数首先根据输入的 MachineInstr 指
+
+令设置输出的 MCInst 指令的 Opcode 值，然后根据 Opcode 值对普通的运算指令和需要重定位的访存指令进行分别处理。对于普通的运算指令，根据 MI提供的MachineOperand 的个数来设置一个 for 循环，对其中每一个 MachineOperand 调用 LowerOperand 进行操作数降级，最后调用 addOperand 函数把这个 MCOperand追加到 MCInst 指令中。对于需要重定位的访存指令，与不需要重定位的指令区别在于：首先对其符号操作数（主要是全局地址和外部符号）添加重定位标志TargetFlag，然后交由 SW64MCInstLower::LowerOperand 处理。Machineinstr 经过''精简”后以 MCInst 形式存在。
+
+（3）LowerOperand，对每一个 MachineOperand 进行如下的处理：根据 MI中的 MachineOperand 类型（寄存器或立即数），通过调用 getReg（getImm）函数获 得 MachineOperand 的 值 ， 并且 通 过 creatReg（ createImm ） 函 数 来填 充MCOperand 的值，对于 Operand 类型中的符号操作数如基本块地址、跳转表索引、常量池索引、块地址，交由 SW64MCInstLower::LowerSymbolOperand 处理。
+（4）LowerSymbolOperand，其功能是将 MachineInstr 指令中的符号操作数转换为 MCInst 指令中的符号操作数。该函数首先根据 MachineOperand（MachineInstr 指令中的符号操作数）中的重定位标志设置 MCOperand（MCInst指令中的符号操作数）的符号引用表达式类型VariantKind（缺省为空类型），然后根据 MachineOperand 类型采用特定的 getXXX 方法得到相应的符号字符串MCSymbol，最后根据 MCSymbol 和 VariantKind 创建一个汇编表达式 MCExpr，并且使用该汇编表达式通过 createExpr 方法创建一个 MCOperand。
+
+# 4.2.1.3 目标流输出接口的设计与实现
+
+设计的SW64 输出流接口图4.3所示，作用是使目标实现对目标特定的汇编指 示 的 支 持 。 SW64TargetStreamer 是 MCTargetStreamer 的 子 类 ，SW64TargetAsmStreamer 和 SW64TargetELFStreamer 分别是 SW64 后端在汇编输出流和 ELF 输出流的具体的实现接口。SW64TargetStreamer 针对每一个汇编指示 符 都 具 有 一 个 纯 虚 方 法 （ 实 现 的 虚 方 法 如 表 4.1 所 示 ）， 而SW64TargetAsmStreamer 和 SW64TargetELFStreamer 分别对 SW64TargetStreamer中的虚方法进行实现。在汇编打印和汇编解析等过程中，通过调用
+
+getTargetStreamer 来获取输出流并转换到 SW64TargetStreamer。并且调用者始终与 SW64TargetStreamer 对 话 ， 不 会 区 别 SW64TargetAsmStreamer 和SW64TargetELFStreamer。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/98d9936ce54538d454c6401a4c34c5c98d5d164c85acf7bb5ef6a48c63fa1e5f.jpg)
+图 4.5 SW64 输出流接口结构
+
+表4.1 支持的汇编指示
+
+<table><tr><td>方法</td><td>作用</td></tr><tr><td>emitDirectiveSetReorder</td><td>指示汇编器可以对汇编指令重排序;</td></tr><tr><td>emitDirectiveSetNoReorder</td><td>指示汇编器不可以对汇编指令重排序;</td></tr><tr><td>emitDirectiveSetMacro</td><td>指示汇编器使用汇编宏指令;</td></tr><tr><td>emitDirectiveSetNoMacro</td><td>指示汇编器不使用汇编宏指令;</td></tr><tr><td>emitDirectiveSetAt</td><td>设置汇编器使用AT寄存器;</td></tr><tr><td>emitDirectiveSetWithArg</td><td>设置汇编器使用指定的寄存器作为AT寄存器;</td></tr><tr><td>emitDirectiveSetNoAt</td><td>设置汇编器不使用AT寄存器;</td></tr><tr><td>emitDirectiveEnd</td><td>发射函数结束;</td></tr><tr><td>emitDirectiveEnt</td><td>发射函数入口;</td></tr><tr><td>emitDirectiveSetArch</td><td>发射生成代码的架构类型。</td></tr></table>
+
+编写头文件SW64TargetStreamer.h，确保对该头文件进行宏定义并且包含必要的依赖头文件。首先定义 SW64TargetStreamer 类，该类继承 MCTargetStreamer父类，在该类中声明表 4.1 中所示的所有 emitDirectiveXXX 虚方法。然后定义SW64TargetStreamer 的 两 个 子 类 SW64TargetAsmStreamer 和
+
+SW64TargetELFStreamer，声明两个子类复写父类的虚方法，并且定义两个子类所特有的成员变量。
+
+编写实现文件 SW64TargetStreamer.cpp，首先包含 SW64TargetStreamer.h 等头文件，然后编写三个类的构造函数，最后编写两个子类方法的实现代码。对于SW64TargetAsmStreamer，需要打印相应的汇编指示符的字符串到汇编输出流，而对于 SW64TargetELFStreamer，则需要实现汇编指示符在汇编过程中所执行的所有操作。
+
+# 4.2.1.4 汇编属性描述接口的实现
+
+接口设计如图 4.6 所示，MCAsmInfo 基类定义了大量的目标汇编属性和特性，用于配置汇编打印、对象文件生成等，并且具备默认值。然而并不是所有属性的默认值适用 SW64 后端，因此需要将 SW64 后端特定的汇编属性声明在SW64MCAsmInfo 类中，以修改默认值。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/96d10ec940ed64531a25240248775f4e12b1507c5e3db8309a77373a68b7a0b5.jpg)
+图 4.6 SW64 汇编属性接口
+
+编写 SW64MCAsmInfo.[h, cpp]文件，创建 SW64MCAsmInfo 类，描述特定于 SW64 目标的汇编属性和特性。主要为其添加了各种汇编指示符的定义或格式，支持异常处理的类型、指令的对齐大小、代码指针大小、栈槽大小等体系结构特定的属性，以及指定了使用集成汇编器、支持发射调试信息等其他特性。
+
+# 4.2.1.5 指令打印接口的设计与实现
+
+SW64指令打印接口设计如图4.7所示，主要用于汇编指令的打印。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/c60b2f2876f77e302533832ed2162fb3a8259577bf47fc29cf335dca9c28e1ae.jpg)
+(a) 接口结构
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/b0bd605d039938aaacd868950d56e1be04a9a4cef81f9db2070d176ea4cd6aee.jpg)
+(b) 各方法之间的调用关系
+图 4.7 SW64 指令打印接口
+
+编写 SW64InstPrinter.h 头文件，在其中定义 SW64InstPrinter 类，继承MCInstPrinter 类 ， 声 明 SW64InstPrinter 具 有 getRegisterName 、 printInst 、printInstruction、printOperand 方法。
+
+编辑 CMakeLists.txt，在其中添加“tablegen(LLVM SW64GenAsmWriter.inc -gen-asm-writer)”，这将使得 TableGen 根据 SW64 后端的寄存器集描述和指令集描 述 自动 生成 的 SW64GenAsmWriter.inc 文 件 ，在 .inc 文 件中 自 动生 成getRegisterName 和 printInstruction 的代码。getRegisterName 方法返回指定寄存器的汇编名称字符串。printInstruction 方法中包含了指令集中所有的汇编助记符字符串（字符数组 AsmStrs）以及在 LLVM 中的 Opcode 编码（OpInfo0）。首先将对应MCInst 指令的助记符字符串输出的Asm 流中，然后调用printOperand 方法（或者在指令集描述文件中指定的其他操作数打印方法）打印 MCInst 的每一个操作数。
+
+编写 SW64InstPrinter.cpp 文件，首先要包含 SW64InstPrinter.h 等头文件，包含 TableGen 生成的 SW64GenAsmWriter.inc 文件。其次，编写 printInst 和printOperand 方法的实现代码：
+
+（1）printInst 是指令打印接口的入口函数，每一条 MCInst 指令都是经过printInst 打印到输出流中。首先对特殊指令进行处理，调用 printInstruction 对每一条 MCInst 指令进行打印，然后调用父类 MCInstPrinter 的 printAnnotation 方法
+
+打印汇编指令的注释。
+
+（2）printOperand 方法是默认的操作数打印方法，每个后端都需要实现该方法。操作数只有3种类型：寄存器、立即数、符号表达式，对于寄存器操作数，首先通过 getRegisterName 方法获取寄存器的汇编字符串，然后转换成对应的小写字母发送到 Asm 流中。对于立即数操作数，先通过 formatImm 将立即数格式化，然后发送到 Asm 流中。对于符号操作数，则通过 MCSymbol::print 接口将其发送到Asm 流中。
+
+# 4.2.2 输出到可重定位的对象文件
+
+指定输出对象文件时，在 MachineInstr 降级为 MCInst 并且发送到MCELFStreamer后，接下来将进行指令的编码，以及生成对象文件。输出对象文件时，常需要完成三个任务，1：根据重定位，对可以修正的指令和数据进行修正；2：对重定位进行处理，并输出相关的重定位；3：输出文件时，需要设置体系结构的信息，如在对象文件的头部设置 EFLAGS 等。在这个阶段，主要需要在 LLVM 中添加特定于 SW64 后端的重定位相关信息，以及移植指令编码器SW64MCCodeEmitter、汇编器后端 SW64AsmBackend 两个模块。
+
+# 4.2.2.1 重定位相关信息的添加
+
+每个后端的 ELF 重定位类型都定义在各自架构的.def 文件中，将 SW64 后端支持的重定位类型定义在 include/llvm/BinaryFormat/ELFRelocs/SW64.def 文件中，其中按一定的格式包含了重定位类型以及代表重定位类型的枚举值。将该重定位类型定义文件包含在文件 include/llvm/BinaryFormat/ELF.h 中，并且将代表SW64 机器体系结构的枚举值以及 EFlags 添加到 ELF.h 文件的对应位置。修正（fixup）类型定义在SW64FixupKinds.h中。修正类型与重定位类型具有一定的关系是：修正是输出对象文件时，指出所在指令应按什么规则被重写，当无法确定该怎样重写指令，就把对应的修正转化成SW64架构支持的重定位类型。所以定义修正类型与对应的SW64 重定位类型非常关键。
+
+在 MachineInstr 阶段，使用 TSFlags 表示符号的引用类型。其中，TSFlags 是定义在 SW64BaseInfo.h 文件中的特定于 SW64 目标的一组标志，以“MO_XXX”
+
+表示。
+
+在 MCInst 阶段，使用 VariantKind 来表示符号的引用类型。VariantKind 是符号引用修饰符，在 include/llvm/MC/MCExpr.h 中的 MCSymbolRefExpr 类中定义，将特定于 SW64 后端的 VariantKind（以“VK_XXX”表示）添加到 MCExpr.h文件中，用于在MC 层表示表达式内部对符号的引用。
+
+在指令编码阶段，使用 FixupKind 来表示符号的引用类型。在SW64FixupKinds.h 文 件 中 定 义 了 SW64 目 标 的 所 有 修 正 类 型 ， 以“fixup_SW64_XXX”表示。尽管大多数当前的修正类型反映了唯一的重定位，但是对于给定的重定位，可以具有多种修正类型，因此需要进行唯一命名。
+
+在对象文件生成阶段，将修正类型 FixupKind转换为对应的重定位类型（以“R_XXX”表示）。
+
+# 4.2.2.2 指令编码器的设计与实现
+
+经过 MI降级接口 SW64MCInstLower 处理后，指令发射到 ELF 数据流中是由指令编码器SW64MCCodeEmitter完成指令编码的，其设计如图4.8所示。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/104857e5fa0e561b855a59a2536947e8b1f884755c81b956e047ab800ab5affb.jpg)
+(a)编码器结构
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/46e5c1d89fa992dc4eeacacd55da59eb911f334488f1f590858bf969f4eced7e.jpg)
+(b)编码器函数调用关系
+图 4.8 SW64 指令编码器
+
+编写 SW64MCCodeEmitter.h 头文件，首先包含 MCCodeEmitter.h 头文件，接 着 定 义 继 承 MCCodeEmitter 基 类 的 SW64MCCodeEmitter 类 ， 并 且 在SW64MCCodeEmitter 中声明图 4.8(a)中所示的五个方法。
+
+编辑 SW64/CMakeLists.txt，添加“tablegen(LLVM SW64GenMCCodeEmitter.inc -gen-emitter)”，以使用 TableGen 解析指令集描述文件，生成编码文件SW64GenMCCodeEmitter.inc。此.inc 文件中只有一个 getBinaryCodeForInstr 函数，其将每一条指令的二进制编码信息存储在 InstBits[]数组中，调用默认的操作数编码函数 getMachineOpValue 或者其他在指令集描述文件中指定的函数来编码不同的操作数，并且会根据具体的指令中的 operand 来生成重定位的信息，最后返回指令的编码。
+
+编写 SW64MCCodeEmitter.cpp 实现文件，首先包含所需的头文件以及TableGen 生成的 SW64GenInstrInfo.inc 和 SW64GenMCCodeEmitter.inc。然后按照图 4.8(b)所示的结构来编写代码实现 SW64MCCodeEmitter 的四个方法：
+
+（1）encodeInstruction，编码指令的入口函数，主要通过调用 tablegen 产生函数 getBinaryCodeForInstr 来获取指令的编码，然后将获得的编码输出到 ELF 流中。
+（2）getMachineOpValue，getBinaryCodeForInstr 函数通过 getMachineOpValue完成每个操作数的编码，对于寄存器操作数和立即数操作数，处理非常简单，只是将对应的值返回；而对于跳转目标操作数，通过 getBranchTargetOpValue 函数处理；对于符号表达式操作数，通过调用 getExprOpValue 来完成。
+（3）getBranchTargetOpValue，返回跳转目标操作数的二进制编码。根据跳转目标表达式创建一个重定位，并且将该重定位记录在 Fixups 数据结构中，返回 0。
+（ 4 ） getExprOpValue ， 主 要 是 需 要 重 定 位 的 符 号 引 用 ， 根 据SW64MCInstLower::LowerSymbolOperand 接 口 设 置 的 符 号 引 用 表 达 式 类 型VariantKind，确定对应的修正类型 FixupKind（所有的重定位修正类型在SW64FixupKinds.h 中定义），并且根据该重定位修正类型、符号和偏移创建MCFixup 并存储在 Fixups 数据结构中，返回 0。
+
+# 4.2.2.3 汇编器后端的设计与实现
+
+设计的SW64 汇编器后端如图4.9所示，主要函数调用关系如图 4.10所示。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/3966cf53f68f9647cdc0ea4480801f7746284a31bda584b0446ee0420efd0014.jpg)
+图 4.9 SW64 汇编器后端
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/09dee899b7614ee44a90d3fc12f78329c11c203e7e5375d4e0886e9d1b303466.jpg)
+图 4.10 汇编器后端的函数调用关系
+
+首先编写 SW64AsmBackend.h 头文件，在其中包含 SW64FixupKinds.h、MCAsmBackend.h 头文件，定义 SW64AsmBackend 类，并声明 applyFixup、
+
+createObjectTargetWriter、getFixupKind、getFixupKindInfo、getNumFixupKinds、writeNopData 等方法。
+
+其次编写 SW64AsmBackend.cpp 文件，在其中包含必须的头文件，并编写SW64AsmBackend 类的方法的实现代码：
+
+（1）applyFixup，根据传递过来的修正 MCFixup 以及值 Value，对指令进行修正。applyFixup 首先根据修正信息得到指令的修正类型，继而调整修正的值Value，由于不同的重定位类型其修正值不同，需要对特殊的重定位类型重新计算修正值。对于修正值Value为零的指令，不需要进行修正，直接返回。对于确定需要修正的指令，首先从二进制指令数据中读取原始的指令二进制字节到CurVal，然后使用经过调整的修正值Value修改原始指令字节CurVal，最后将修改过的指令字节 CurVal 覆盖原始指令的位置，将修正过的机器码写回到Code/Data 完成修正。获取指令修正的 Value 的值对于 applyFixup 函数修正指令至关重要，通过公共函数 MCAssembler::handleFixup 来完成。如图 4.10，handleFixup 首先调用函数 evaluateFixup，这个函数主要是两个作用：一是：通过IsResolved标记是否要留出重定位。二是：完成修正值的计算并返回。通过函数getWriter().recordRelocation 调用一个接口函数 getRelocType，对重定位的类型进行转换，把 fixup 映射成一个重定位类型。ELFObjectWriter::recordRelocation 函数获取修正类型信息，重定位类型信息，符号信息，最后创建重定位入口。
+（2）createSW64ELFObjectWriter，作用是处理输出的 ELF 格式对象文件。SW64ELFObjectWriter 类提供 getRelocType 接口，将 LLVM 的内部修正转换为对应的重定位，以及 needsRelocateWithSymbol 接口，用于指定重定位是否通过符号进行重定位，不使用符号的重定位将通过Section进行重定位。
+（3）getFixupKind，将重定位Section中的重定位类型名称字符串映射为修正类型 FixupKind。
+（4）getFixupKindInfo，该函数会以结构体的形式返回某个修正类型的信息，包括该修正类型的名称，写重定位信息的偏移大小，对应重定位类型修改二进制指令的位数及描述额外信息的标志 Flags，主要是用来标识修正类型是否是 PC相对偏移类型。
+（5）getNumFixupKinds，返回 SW64 目标的 fixup 修正类型的总个数。
+
+（6）writeNopData，将一段NOP 序列写入指定输出，根据体系结构来控制段的对齐。
+
+最后，编写 SW64ELFObjectWriter.cpp 文件，定义 SW64ELFObjectWriter 类，并且为其两个接口函数编写代码：
+
+（1）getRelocType，将修正类型映射为重定位类型。
+（2）needsRelocateWithSymbol，根据重定位的类型，返回该重定位是否依赖符号。大多数重定位都依赖符号，其他重定位依赖 Section。
+
+在图 4.10 中，MCAssembler::layout 完成绝大部分工作。该函数首先创建虚拟 fragment 并分配 section 序数。给 fragment 和 section 分配 layout 顺序标记。最后会为每一个需要修正的 MCSection 和 MCFragment 计算和应用修正，生成必要的重定位入口，并将经过修正的编码写回到机器码/数据 bit。当所有重定位都已经记录并且应用，二进制代码已经准备好了写入文件。
+
+# 4.3 SW64后端运行时动态连接器的设计与实现
+
+如本文3.1节中的对象加载以及应用重定位的内容所述，运行时动态连接器主要完成对象文件的加载以及链接（应用重定位）任务。本文对运行时动态连接器进行了实现，主要是添加了对SW64后端的重定位的特定处理。
+
+# 4.3.1 对象加载时期对重定位的处理
+
+在对象加载阶段处理重定位，每个后端的重定位类型以及处理重定位的方式不尽相同。目前已经为SW64后端实现了两大类的重定位处理：依赖 GOT表（Global Offset Table，全局偏移表）的重定位、依赖全局指针（Global Pointer，GP ） 的 重 定 位 。 处 理 重 定 位 的 函 数 调 用 关 系 如 图 4.11 所 示 ， 在llvm::RuntimeDyldELF::processRelocationRef()方法中添加特定于 SW64 后端的重定位处理。对于需要 GOT 表的重定位类型，通过中间部分的处理方式来处理，而对于其他的重定位类型，则通过右侧的 processSimpleRelocation 方法作为简单重定位类型来处理。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/b0112ca8b17b3a83d48c4a9479338747f3f87a5bc44c0650e96d9ad07cf51851.jpg)
+图 4.11 创建符号表时对重定位的处理方式
+
+除了在 processRelocationRef()方法中添加 SW64 特定的处理之外，还需要在RuntimeDyldELF::getGOTEntrySize()中添加对 sw64 Triple 的处理以正确获取SW64 后端的 GOT 条目大小，以及在 RuntimeDyldELF::relocationNeedsGot()中添加对 sw64 Triple 的处理以确定 SW64 后端的重定位类型是否需要创建 GOT 条目。运行时动态连接器将根据这些信息为程序分配GOT段。
+
+# 4.3.2 链接时期解析重定位
+
+完成模块之前，需要应用重定位。解析重定位时，首先解析外部符号，所有外部符号解析完成之后，将解析对象文件内的所有重定位，两者最终都是通过RuntimeDyldELF::resolveRelocation 来 完 成 重 定 位 的 解 析 ，RuntimeDyldELF::resolveRelocation 是解析重定位的公共接口，具体的实现均由各 个 架 构 自 定 义 的 解 析 方 法 来 完 成 ， 解 析 方 法 为
+
+RuntimeDyldELF::resolveXXXRelocation，例如，SW64 后端的解析方法将命名为RuntimeDyldELF::resolveSW64Relocation。函数调用关系如图 4.12 所示：
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/6b87d6e303f35bcc0921ca3cdd4ae17da11bcfafa7604cb34df7d0f3f9656fb2.jpg)
+图4.12 解析重定位
+
+首 先 ， 在 RuntimeDyldELF.h 中 的 RuntimeDyldELF 类 中 声 明resolveSW64Relocation()方法。其次，在 RuntimeDyldELF::resolveRelocation 方法中 的 switch-case 结 构 中 添 加 对 sw64 Triple 的 处 理 ， 即 添 加resolveSW64Relocation()方法的入口。最后，在 RuntimeDyldELF.cpp 中实现RuntimeDyldELF::resolveSW64Relocation()方法。
+
+重定位的目标位置由 RE.SectionID 和 RE.Offset 描述。RE.SectionID 可用于查 找 SectionEntry 。 每 个 SectionEntry 具 有 三 个 描 述 其 位 置 的 成 员 。SectionEntry::Address 是在当前（主机）进程中将 Section 加载到内存中的地址。SectionEntry::LoadAddress 是 该 Section 将 在 目 标 进 程 中 拥 有 的 地 址 。SectionEntry::ObjAddress 是原始发射的对象图像中（以及当前地址空间中）此Section 的地址。
+
+应用重定位就像 Section 被加载到 SectionEntry::LoadAddress 一样，但是重定位将被应用在基于SectionEntry::Address 的地址上。如果值计算需要使用重定位，SectionEntry::ObjAddress 来引用目标内存内容。
+
+RuntimeDyldELF::resolveSW64Relocation()方法有 5 个参数，分别是： $\textcircled{1}$ constSectionEntry &Section，表示要应用重定位的符号所在 Section 的地址； $\textcircled{2}$ uint64_tOffset，表示符号在 Section 中的偏移； $\textcircled{3}$ uint64_t Value，是符号的加载地址，对于引用当前对象中符号的重定位，Value 将是该符号所在 Section 的 LoadAddress，而对于外部符号，Value将是目标地址空间中符号的地址； $\textcircled{4}$ uint32_t Type，是一个枚举值，表示符号的重定位类型； $\textcircled{5}$ int32_t Addend，提供了有关符号位置的其他信息。
+
+resolveSW64Relocation 首先根据 Section 和 Offset 参数获取需要重定位的指令的地址，然后获取 GOT段的地址，因为大部分重定位类型需要依赖全局指针来重定位，全局指针指向GOT段基址 $+ 0 \mathrm { x } 8 0 0 0$ 的位置。随后，使用一个switch-case结构来处理SW64的每一种重定位。对于使用GOT表的重定位，使用GOT条目相对于GP 的偏移（Addend）修改指令；而对于依赖 GP 的重定位，则使用目标符号（或者需要重定位的指令）的地址相对于GP 的偏移来修改指令。其中，在修改指令（即应用重定位）之前会检查数据的有效性，例如，GOT 偏移是否超出了GOT表的范围，GP 偏移是否超出GP 寻址范围等等。
+
+# 4.4 本章小结
+
+本章主要完成了 MCJIT 在申威平台上的后端实现工作。其中重点描述了基于MC 层的集成汇编器的设计与实现，以及RuntimeDyld 动态链接器对SW64后端的支持。相关工作完成之后，SW64后端能够成功支持即时编译。
+
+# 5 即时编译优化
+
+# 5.1 研究动机
+
+在 LLVM 后端中，指令选择 Pass 是最费时的 Pass 之一。编译 SPEC CPU2006基准测试函数的研究表明，平均而言，使用 LLVM 中的llc工具-O2 生成 $\mathbf { \boldsymbol { x } } 8 6$ 代码，指令选择Pass 花费的时间几乎占用llc运行总时间的一半[71]。
+
+在 LLVM 架构中，指令选择是将 LLVM IR 的内部虚拟指令转换为特定于目标机器指令的过程，即从 LLVM IR 到 MachineInstr 序列的转换过程。LLVM 使用基于 SelectionDAG 的指令选择器。如图 5.1 所示，LLVM 代码生成器基于SelectionDAG 的指令选择包括以下步骤：
+
+1）构建初始 DAG：此阶段执行从输入 LLVM IR 代码到非法 SelectionDAG的简单转 换，由 SelectionDAGBuilder 创 建一个其 节点承载 IR 操作的SelectionDAG 对象。
+2）优化 SelectionDAG（DAG 合并 1）：此阶段对 SelectionDAG 进行简单的优化以简化它，并识别支持这些元操作的目标的元指令（如rotate和div/rem对）。这使得结果代码更高效，以及更容易与目标指令进行匹配。
+3）SelectionDAG 类型合法化：此阶段转换 SelectionDAG 节点以消除目标不支持的任何数据类型。
+4）优化 SelectionDAG（DAG 合并）：运行 SelectionDAG 优化器以清理类型合法化所暴露的冗余。
+5）SelectionDAG 操作合法化：此阶段转换 SelectionDAG 节点以消除目标上不支持的任何操作。
+6）优化 SelectionDAG：运行 SelectionDAG 优化器以消除操作合法化带来的低效率。
+7）根据DAG选择指令：指令选择器使用模式匹配将DAG操作与目标指令匹配。此过程将与目标无关的 DAG 节点转换为表示目标指令的另一个 DAG 节点。
+8）SelectionDAG 调度和形成：最后一个阶段为目标 DAG 节点中的指令分配顺序，将其线性化，并将其发送到正在编译的MachineFunction 中，即发射到
+
+MachineInstr 序列。此步骤使用传统的 prepass 调度技术。
+
+完成所有这些步骤后，销毁 SelectionDAG，然后运行其余的代码生成 Pass。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/29d786feef1c880d119502a0c61dfa449d703e0cb0c1629ab6381b41865484ae.jpg)
+图 5.1 基于 SelectionDAG 的指令选择流程
+
+对于传统的静态编译，使用更加复杂的指令选择算法以及优化算法对代码进行优化是一种理想的选择，而在即时编译这种编译在程序运行过程中完成情况下，复杂的指令选择算法以及优化算法必然使得编译时间延长，并且其所带来的程序执行性能增益也许并不能抵消其优化代码所消耗的编译时长。因此，对于即时编译来说，在尽量不降低所生成代码质量的前提下，提高代码生成的速度同样会提升其性能，显然这也是一种优化的思路。
+
+# 5.2 快速指令选择
+
+本章为 SW64 后端设计了快速指令选择（FastISel）方案，替代 SelectionDAG指令选择方案的实现。快速指令选择的思想是将占大多数的、简单合法的 LLVMIR 指令直接生成 MachineInstr 序列，而占少数的复杂指令仍然通过 SelectionDAG指令选择来完成，旨在通过避免复杂的合并和降级逻辑来实现速度增益。
+
+快速指令选择的整体思路是：在指令选择 Pass 中，首先使用快速指令选择
+
+接口对指令进行选择。快速指令选择的流程如图5.2所示，指令选择首先对函数参数进行降级，优先使用FastISel 的lowerArguments 接口对函数参数降级，若未完成参数降级（可变函数参数、参数数目多于参数寄存器数目、参数类型不匹配等原因），再通过 SelectionDAGISel 接口的 LowerArguments 进行复杂的参数类型调整等操作，继而由后端代码完成参数降级，完成后发射函数参数。参数降级完成后，基本块中的每一条 IR 指令通过快速指令选择接口直接发射为MachineInstr 指令序列，快速指令选择接口可以根据 TableGen 生成的指令选择代码进行正常的FastISel 进程，快速选择出简单的一元操作指令和二元操作指令；对于正常的 FastISel 进程无法完成选择的操作指令，目标无关接口调用后端的fastSelectInstruction 接口，给目标提供了为不适合 FastISel 框架的任何操作发出代码的机会；如果 IR 指令无法通过 FastISel 接口完成指令的映射，再将整个基本块通过 SelectionDAG 指令选择器进行指令的选择并发射为 MachineInstr 指令序列，完成指令选择进程。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/2f08a77bac811dc9528e73ba459ac5ed2ce4c3ae24b7dc0d7c841744c681e645.jpg)
+图5.2 快速指令选择流程
+
+# 5.3 SW64 后端的快速指令选择实现
+
+本小节为 SW64 后端实现了快速指令选择接口 SW64FastISel，SW64FastISel主要包含对两种类型的方法，一类是选择和发射一条 IR 指令，另一类是为指令发射实现特定的功能。
+
+其中，用于选择和发射一条 IR 指令的方法有：
+
+（1） fastSelectInstruction：当正常的 FastISel 进程无法选择指令时，由目标无关代码调用该方法进行自定义的指令降级。这给目标提供了机会为不适合 FastISel 框架的任何指令发出代码。该方法通过调用SelectXXX来执行具体的指令选择。
+（2） fastEmit_r：发出具有给定类型和操作码一元操作指令，指令具有一个指定类型的源操作数和一个指定类型的目的操作数。
+（3） fastEmit_rr：发出具有给定类型和操作码二元操作指令，指令具有两个指定类型的源操作数和一个指定类型的目的操作数。
+（4） SelectLoad：将 IR 指令“load”发射为加载指令，将内存地址中的值加载到目的寄存器。
+（5） SelectStore：将 IR 指令“store”发射为存储指令，将源寄存器的值存储到内存地址。
+（6） SelectBranch：将 IR 指令“br”发射为转移指令。
+（7） SelectFPExt：发射浮点数扩展指令，将f32类型（单精度）浮点数转换为f64类型（双精度）浮点数。
+（8） SelectFPTrunc：发射浮点数截短指令，将将f64类型浮点数转换为f32类型浮点数。
+（9） SelectIToFP：发射类型转换指令，将整数转换成浮点数。
+（10）SelectFPToI：发射类型转换指令，将浮点数转换成整数。
+（11）SelectBinaryIntOp：发射带整数立即数的二元操作指令，算术操作和逻辑操作。
+（12）SelectRet：发射“ret”指令，发出指令将函数的返回值存储到指定寄存器，以及函数的返回。
+（13）SelectIntExt：发射整数扩展指令，将不足64位的整型数扩展到64位，
+
+按零扩展或符号扩展。
+
+（14）SelectSelect：发射选择指令。
+
+用于为指令发射实现特定的功能的方法主要有：
+
+（1） fastLowerArguments：进行特定于目标的函数参数降级。
+（2） fastLowerCall：进行特定于目标的调用降级。
+（3） fastMaterializeConstant：使用特定于目标的逻辑（例如常量池加载）在寄存器中发出常量，包括整数常量、浮点常量和全局值。
+（4） fastMaterializeAlloca：使用特定于目标的逻辑在寄存器中分配一个alloca 地址。
+（5） fastMaterializeFloatZero：使用目标特定的逻辑在寄存器中发射浮点常数 $+ 0 . 0$ 。
+（6） tryToFoldLoadIntoMI：指定的 MachineInstr 的操作数是虚拟寄存器，并且该虚拟寄存器由指定的加载指令提供，即已经将特定的值通过该加载指令加载到该虚拟寄存器。如果可能，尝试折叠 load 作为指令的操作数。
+
+在使用快速指令选择时，由 SW64FastISel 接口通过 createResultReg 创建指定类型的虚拟寄存器，通过 BuilMI 创建 MachineInstr 指令，直接将 LLVMIR 转换成序列化的MachineInstr指令，没有经过复杂的DAG节点合并和指令选择算法，经手工编写的代码实现，因此，快速指令选择方案的速度明显比基于SelectionDAG 的指令选择快。
+
+# 5.4 本章小结
+
+基于即时编译这种特殊的编译形式，以及现有的指令选择方式在代码生成中耗时较长，通过调整代码生成过程中的指令选择方式，设计并实现了针对SW64后端的快速指令选择方案，以求提高指令选择的速度，进而提升即时编译器的整体性能。
+
+# 6 测试与分析
+
+本文通过对 LLVM 即时编译框架的研究，分析了后端支持 MCJIT 需要实现的内容，完成了 SW64 后端对 MCJIT 的支持，并且优化了后端代码生成中指令选择的性能。为了验证本文所做工作，完成了相关的测试，并且对测试结果进行了统计分析。本文的测试内容由点到线，逐个测试每一部分的功能，达到了验证移植的每一部分，并且降低检查错误难度的目标，主要包括以下几个测试步骤：
+
+1）配置好测试环境：包括构建 LLVM 以及选择恰当的测试集并完成配置工作；
+2）测试代码生成器的正确性：即确保移植工作能够生出正确的汇编代码，这部分测试内容将在一定程度上验证4.2.1节所做的工作；
+3）测试 MC 层集成汇编器：由 LLVM IR 代码生成可重定位的对象文件，即.o 文件，再由系统链接器链接成可执行文件，测试程序是否正常运行并正确输出。这部分测试内容是对整个后端移植工作的整体测试，不仅测试了移植的MC 层，还可以检查出代码生成器移植过程中的疏漏；
+4）测试运行时动态连接器 RuntimeDyld：使用 lli 工具执行 LLVM IR 文件，测试是否正常运行且正确输出结果，可以验证4.3节所做的工作；
+5）测试快速指令选择在即时编译器中的加速效果：以启用快速指令选择选项与否对比 IR 文件总的执行时间，验证FastISel 带来的性能增益，即验证第5章所做的工作。
+
+移植后的即时编译器测试工作在国产神威服务器上完成，CPU为64位处理器申威 1621，主频 1.60GHz，国产深度 Linux 系统，128GB RAM，480GB SATASSD。其中申威 1621 处理器采用多核结构和片上系统（SoC：System on Chip）技术，在单芯片中集成了 16 个片上环网互连的同构的 64 位 RISC 结构的改进型第三代申威处理器核心（简称Core3A），同时还集成了32MB的共享三级Cache、8路64位DDR3 存储控制器，以及第三代标准PCI-E 接口和维护接口组成的系统接口。
+
+# 6.1 即时编译器的正确性测试
+
+# 6.1.1 test-suite 测试套件
+
+LLVM 作为一个基础结构，整个项目包含了一系列的开发、测试、调试工具，因此，LLVM 拥有自己的一套测试体系。LLVM 的测试主要有两类测试：一类是回归测试，一般位于各个子项目的test 目录中，开发者在每一次提交更新之前都应该进行回归测试；另一类是整个程序的测试，是独立于 LLVM 项目的一套测试集，称为test-suite。本文的测试采用第二种测试类型，即使用test-suite验证移植的即时编译器的正确性。
+
+test-suite中的测试程序主要包含在3个目录中：
+
+（1）SingleSource/包含单个源文件的测试程序。这些通常是小型基准程序或计算特定值的小程序，子目录可能包含多个程序。
+（2）MultiSource/包含具有多个源文件的程序子目录。大型基准测试和整个应用程序都在此目录。
+（3）External/是外部程序测试基准套件。External 目录包含用于构建 LLVM外部（即不与 LLVM 一起分发）测试代码的Makefile。该目录中最突出的成员是SPECCPU系列基准套件，除此之外，还有快速模拟大分子体系的并行分子动力学代码Namd、数据挖掘关联分析算法的FPGrowth、NVIDIA 推出的通用并行计算架构 CUDA、使用轮廓隐式马尔可夫模型进行生物序列分析 HMMER、使用光线跟踪绘制三维图像的基准测试 Povray，以及 Nurbs 和 skidmarks10。External目录不包含这些基准测试的实际代码，只包含正确编译这些程序的 Makefile。
+
+test-suite测试套件包含程序的完整源代码，这些程序用C或 $\mathrm { C } { + + }$ 语言编写，可以编译并链接到可执行文件。每个测试程序附带参考输出作为正确答案，若测试例程的输出结果与参考输出一致，则该测试例程通过测试并且输出“PASS”到标准输出；若测试例程的输出结果与参考输出不匹配，则该测试例程不通过测试并且输出“FAILED”到标准输出。通过检查整个测试的输出日志便可以方便的确定测试例程通过与否。
+
+除了编译和执行程序之外，test-suite 整个程序测试还可以作为对 LLVM 性能进行基准测试的一种方式，包括生成程序的运行效率以及 LLVM 编译、优化
+
+和生成代码的速度。test-suite套件提供了收集性能指标的工具，用于收集基准测试运行时间，编译时间和代码大小等信息。test-suite测试套件还执行各种 LLVM优化的定时测试，它记录编译器和JIT的编译时间，此信息可用于比较 LLVM 优化和代码生成的有效性。
+
+# 6.1.2 搭建测试环境
+
+由于较新版本的LLVM只支持CMake构建，不再支持使用Configure构建，而test-suite的JIT测试只能使用Configure构建，在配置测试环境时需要修改一些配置文件。所有的配置步骤如下：
+
+1）构建LLVM。指定llvm源码目录是$LLVM/llvm，构建目录为$LLVM/build，使用 CMake 构建 LLVM。
+2 ） 解 压 test-suite 测 试 套 件 。 将 test-suite 测 试 套 件 的 源 码 包 解 压 到$LLVM/llvm/projects/test-suite 目录。
+3）适配 test-suite 配置文件。在$LLVM/llvm/projects/test-suite 目录下的configure、autoconf/config.sub 以及 autoconf/config.guess 三个文件中添加对申威处理器的识别支持，否则不能识别CPU类型而无法完成配置。编辑test-suite目录下的文件 Makefile.programs，注释掉 LLCFLAGS 和 JIT_OPTS 变量的“-enable-correct-eh-support”选项，因为较新版本 LLVM 已经没有这一选项。编辑test-suite 目录下的文件 Makefile.rules，修改 CONFIGURATION 变量使之为空，以确保llvm 工具的路径正确。
+4 ） 配 置 test-suite 。 在 $LLVM/build/projects/test-suite/ 目 录 下 运 行 命 令“$LLVM/llvm/projects/test-suite/configure --with-llvmsrc ${ \boldsymbol { \cdot } } = { \boldsymbol { \ S } }$ LLVM/llvm --with-llvmobj=$LLVM/build --with-clang=$LLVM/build/bin/clang”进行配置。配置后需要在$LLVM/build/目录添加 Makefile.config 和 config.status 两个配置文件，这两个文件是由 Configure 构建 LLVM 时生成的，可以使用 Configure 构建较低版本的 LLVM，生成配置文件后复制过来进行修改以满足测试需要。
+
+经过以上 4 个步骤，test-suite 测试环境已经准备好，可以在$LLVM/build/projects/test-suite/目录下运行“make”命令开始测试。为了提高测试速度，可以采用“make-jN”命令格式使用N（N不宜大于CPU逻辑核心数）个线程测试；
+
+为了方便结果的统计，应当将测试的标准输出定向到文件中。若是修改了Makefile.programs 和 Makefile.rules 中的编译选项，应该重新运行 configure 进行配置。
+
+# 6.1.3 测试与分析
+
+JIT 测试不同于通常的静态编译测试，LLVM 提供了一个解释器工具(lli)来使用 JIT 引擎。lli 通过使用 LLVM 执行引擎实现 LLVM bitcode 解释器和 JIT 编译器。Test-suite测试流程如图6.1所示，测试程序使用clang编译器和一组标志进行编译，生成 LLVM 汇编代码。接着使用opt 优化器对中间代码进行优化，生成优化过的 LLVM bitcode。然后 llc 工具将 bitcode 编译生成汇编文本，再通过编译器$CC 汇编和链接生成可执行程序，运行该可执行程序并将输出转储到文件中；lli 使用一组选项运行该bitcode并将输出转储到文件中。最后将输出与参考输出进行比较，以检查程序输出的正确性。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/02c58c2312f769e2289e888b5b71d1e2e89c0977e3fe67a3c1df9c22fe81b4c1.jpg)
+图 6.1 test-suite 测试流程简图
+
+在移植与开发过程中，始终伴随着“调试—修改—测试”流程，在经过反复的测试和修改之后，进行最终的测试。通过查看测试输出的日志文件，统计结果如表6.1所示。
+
+表 6.1 test-suit 测试结果
+
+<table><tr><td>工具</td><td>编译类型</td><td>测试题目总数</td><td>通过题目数</td><td>未通过题目数</td><td>通过率</td></tr><tr><td>llc</td><td>静态编译</td><td>500</td><td>500</td><td>0</td><td>100%</td></tr><tr><td>lli</td><td>即时编译</td><td>500</td><td>498</td><td>2</td><td>99.6%</td></tr></table>
+
+整体上看，test-suite测试中llc静态编译通过率达到 $100 \%$ ，说明能够正确生出 SW64 后端的完整汇编代码，即证明了 SW64 代码生成器以及汇编打印等模块的正确性。lli 即时编译仅有两个测试用例（“tls”和“2010-12-08-tls”）未能通过测试，是由于当前移植的动态连接器 RuntimeDyld 尚未对线程私有变量的重定位类型进行支持，不能解析TLS 类型的重定位而主动报错退出，498个测试用例的通过可以说明移植的MC 汇编器可以正确编码MCInst 指令，并且正确使用重定位信息且生出完整的对象文件；也可以说明移植的 RuntimeDyld 的正确性，即RuntimeDyld可以准确构建符号表且正确应用重定位。证明了指令编码器、汇编器后端以及动态链接器等模块的正确性与稳定性。
+
+# 6.2 即时编译器的性能对比测试
+
+# 6.2.1 SPEC CPU2006 基准测试
+
+SPEC（The Standard Performance Evaluation Corporation，标准性能评估公司）是一家非营利性公司，旨在建立，维护和认可标准化的基准和工具，以评估最新一代计算系统的性能和能效。SPEC 开发了基准套件，其中包括了SPEC CPU系列。SPEC CPU测试中，测试系统的处理器、内存子系统以及使用的编译器都会对最终的测试结果产生影响，而 I/O（磁盘）、网络、操作系统和图形子系统对于SPEC CPU测试性能的影响小到可以忽略。
+
+本文采用了SPECCPU2006测试套件，SPEC CPU测试使用的都是现实中应用的程序，并没有采用循环的算术操作来进行基准测试，测试更接近实际的生产
+
+和应用场景，因此测试结果能够真实地反映所测试系统的性能。SPEC CPU 2006测试套件包括 CINT2006 和 CFP2006 两个子项目，CINT2006 用于测量和对比整数性能，包含12项整数运算程序，而CFP2006则用于测量和对比浮点性能，包含 17 项浮点运算程序。CPU2006 的各个测试程序由 C/C++/Fortran 语言编写，CPF2006 中有 10 个浮点程序使用了 Fortran 语言编写，而其余测试程序由 C 或$\mathrm { C } { + + }$ 语言编写。
+
+# 6.2.2 测试环境的搭建
+
+CPU2006 测试套件支持多个处理器体系结构和系统的组合，但是对于国产申威处理器并没有提供预编译好的工具包，因此，为了安装 CPU2006 首先需要编译工具包的源代码生出测试工具包的可执行程序。CPU2006 测试套件本是用于测试静态编译，为了测试 LLVM 即时编译，还需要对测试的配置文件适当修改。整个测试环境的搭建需要以下几个步骤：
+
+1）安装 CPU2006。解压 CPU2006 安装包，运行 cpu2006/tools/src/buildtools，将会生成运行测试所需的工具集，并且自动安装在cpu2006/bin/目录。
+2）修改编译配置文件 Makefile。编辑 cpu2006/benchspec/Makefile.defaults 配置文件，对变量OBJ、OBJOPT、LD进行如图6.2所示修改：
+
+```makefile
+ifeq ($(OS),windows_nt)
+OBJ ?= .obj
+OBJOPT ?= -c -Fo@
+LDOUT ?= -Fe@
+MATHLIBOPT ?
+# specs get upset when it can't glob things, so for RMRF (used in # clean targets), call cmd.exe directly instead
+RMRF ?= specs -o NOGLOB -c "cmd /C del /q /f /s "
+CPUFLAGS += -DSPEC_CPU_WINDOWS
+else
+ifndef LLVM_NO_JIT
+OBJ ?= .bc
+OBJOPT ?= -c -emit-llvm -o $@ 修改输出文件扩展名
+else
+OBJ ?= .0
+OBJOPT ?= -c -o $
+endif
+LDOUT ?= -o $
+MATHLIBOPT ?
+RMRF ?= rm -rf
+endif
+```
+
+（a） 设置编译选项
+
+```makefile
+# FC is used for all Fortran builds, so substitute F for F77 in BENCHLANG
+tmpBENCHLANG := $(subst F77,F,$(BENCHLANG))
+BENCHLANG=$(tmpBENCHLANG)
+PRIMARY_BENCHLANG := $(firstword $(BENCHLANG))
+CXXC = $(CXX)
+ifdef LLVM_NO_JIT 不使用链接器$LD
+LD ==$(PRIMARY_BENCHLANG)C)
+ifreq ,,$(PRIMARY_BENCHLANG)LD)
+LD ==$(PRIMARY_BENCHLANG)LD)
+endif
+endif
+# Normal, non-ONESTEP build
+ifndef NEEDATFILE
+ifndef LLVM_NO_JIT
+$(LD) $^$(LDOUT) 使用llvm-link打包LLVM bytecode
+chmod +x $@
+else
+$(LD) $(LD$(PRIMARY_BENCHLANG)FLAGS) $(LDOPTFLAGS) $(EXTRA_LDFLAGS)
+endif
+else
+$(LD) $(LD$(PRIMARY_BENCHLANG)FLAGS) $(LDOPTFLAGS) $(EXTRA_LDFLAGS)
+endif
+```
+
+（b） 设置链接选项
+
+图 6.2 Makefile.defaults 配置文件的修改
+
+3）配置测试参数。在 cpu2006/config 目录复制一个配置文件（Example-XXX.cfg）到 llvm_jit.cfg，并且进行必要的修改，如图 6.3 所示。配置测试的其他参数，例如优化级别、文件扩展名、多线程编译、测试程序的特殊编译选项，均通过 llvm_jit.cfg 文件配置。
+
+```perl
+#submit = $BIND $command
+submit = lli $command
+CC = clang
+CXX = clang++
+FC =
+LD = lvm-link
+```
+
+图6.3 测试配置文件必要的修改
+
+4）设置环境变量。将 LLVM 安装路径的 bin 目录添加到 PATH 变量中，确保 LLVM 可用。使用 shell 运行 cpu2006/shrc 来配置 CPU2006 的环境变量，确保CPU2006可用。至此，CPU2006的测试环境已经搭建完成。
+
+# 6.2.3 测试与分析
+
+执行命令“runspec -c llvm_jit -i test -n 3 --noreportable int”开始测试 CINT2006，在该命令中，使用 llvm_jit.cfg 配置文件，测试规模是 test，测试程序运行 3 次，不生成可报告的结果，测试的程序是所有整数运算程序。CPU2006 的测试流程如图 6.4 所示，对比了 AOT 编译和 JIT 编译，两种编译方式在编译程序的产物以及程序的运行方式上存在明显区别。本章仅使用 CPU2006 进行即时编译的测试。
+
+![](mineru_assets/基于国产平台的LLVM_JIT编译优化技术研究_王洪生/images/cd97c0cb2810dff871fa75667ca5e9260122e3fad2d577ad98848ebe1fbb7fa6.jpg)
+图 6.4 SPEC CPU2006 测试流程
+
+通过改变 llvm_jit.cfg 配置文件中的运行命令行，即可改变 JIT 编译指令选择的方式，为lli 添加“-fast-isel”来启用快速指令选择，而不需要更改其他任何配置，也无需重新编译程序。使用test 规模进行测试，结果如表6.2所示，其中仅测试 $\mathrm { C } / \mathrm { C } { + + }$ 语言测试程序，不包含使用 Fortran语言编写的测试程序。
+
+通过表 6.2 中的数据，在 CPU2006 的 17 个 $\mathrm { C } / \mathrm { C } { + + }$ 测试程序中，11个测试程序在使用快速指令选择后即时编译的性能得到提升，而且提升比较明显，另外 6个测试程序的在使用快速指令选择后性能略有下降。整体上，LLVM 即时编译器在使用快速指令选择后，测试程序的执行速度平均提升 $4 . 6 6 \%$ 。
+
+表 6.2 CPU2006 即时编译测试结果
+
+<table><tr><td rowspan="2">测试程序</td><td colspan="2">运行时间/s</td><td rowspan="2">性能提升</td></tr><tr><td>SelectionDAG</td><td>FastISel+SelectionDAG</td></tr><tr><td>400.perlbench</td><td>331</td><td>292</td><td>11.78%</td></tr><tr><td>401.bzip2</td><td>37.7</td><td>40.9</td><td>-8.49%</td></tr><tr><td>403.gcc</td><td>119</td><td>105</td><td>11.76%</td></tr><tr><td>429.mcf</td><td>14.8</td><td>15.2</td><td>-2.70%</td></tr><tr><td>445.gobmk</td><td>281</td><td>268</td><td>4.63%</td></tr><tr><td>456.hammer</td><td>19.1</td><td>17.4</td><td>8.90%</td></tr><tr><td>458.sjeng</td><td>18.4</td><td>19.3</td><td>-4.89%</td></tr><tr><td>462.libquantum</td><td>1.24</td><td>1.1</td><td>11.29%</td></tr><tr><td>464.h264ref</td><td>62</td><td>60.4</td><td>2.58%</td></tr><tr><td>471.omnetpp</td><td>23.8</td><td>22.6</td><td>5.04%</td></tr><tr><td>473.astar</td><td>23.1</td><td>24</td><td>-3.90%</td></tr><tr><td>483.xalancbmk</td><td>130</td><td>115</td><td>11.54%</td></tr><tr><td>433.milc</td><td>27.1</td><td>27.6</td><td>-1.85%</td></tr><tr><td>444.namd</td><td>41.3</td><td>41.4</td><td>-0.24%</td></tr><tr><td>447.deallII</td><td>209</td><td>199.5</td><td>4.55%</td></tr><tr><td>450.soplex</td><td>13.3</td><td>10.9</td><td>18.05%</td></tr><tr><td>453.povray</td><td>35.8</td><td>32.2</td><td>10.06%</td></tr><tr><td>470.lbm</td><td>12</td><td>11.7</td><td>2.50%</td></tr><tr><td>482.sphinx3</td><td>11.3</td><td>10.4</td><td>7.96%</td></tr><tr><td>平均</td><td></td><td></td><td>4.66%</td></tr></table>
+
+# 6.3 本章小结
+
+在本章节中首先列出了在移植与开发过程中的几个关键阶段的测试。然后针对本文工作的最终产物，进行了两个方面的测试，一个是即时编译器的正确性测试，另一个是针对指令选择优化的性能对比测试。正确性测试的结果说明移植是成功的，LLVM 即时编译在申威平台已经“可以使用”。在即时编译器性能测试中，可以说明，在尽量保证代码质量的同时，缩短指令选择消耗的时间，可以提升即时编译器的整体性能。
+
+# 7 总结与展望
+
+编译器作为基础软件在整个计算机系统中的地位非常重要，优秀的编译器可以生出高效的代码，从而充分发挥处理器的性能。LLVM 是一款非常优秀的开源编译器框架，具有中间表示语言先进、模块化程度高、全时优化等特点，并且近年来发展速度飞快，开发者数量增长迅速，工具链不断完善，应用愈加广泛，显示出了替代GCC 编译器的趋势。我国自主研发且拥有完全自主知识产权的申威处理器，越来越多地应用到超级计算机、高性能服务器、数据中心等关乎国计民生的领域，为我国实现信息产业自主可控和安全发挥了巨大作用。LLVM 编译器支持国产申威处理器SW64后端，将进一步拓展申威处理器的软件生态，方便其他基于LLVM即时编译系统开发的优质应用和项目移植到国产申威平台上来，更好的促进国产处理器的发展与提升其产业化水平，也有利于国产计算机系统的自主可控。
+
+本文首先分析和讨论了当前自主可控呼声高涨的背景下，国产处理器引进LLVM 开源编译器的必要性和重要性。在了解了现有即时编译技术的基础之上，简单分析了 LLVM 编译器框架中三代即时编译实现的内在原理，详细分析了LLVM 即时编译框架 MCJIT 的实现过程。结合开源编译器后端移植机制，为申威多核处理器实现了 LLVM 即时编译器。对后端代码生成过程中的指令选择流程进行了调整，实现了快速指令选择方案，提高了代码生成的速度。通过以上所述工作，本文主要取得了以下成果：
+
+（1）在对 LLVM 后端移植进行分析与研究的基础上，特别是 MC 层的汇编器、支持即时编译的运行时动态连接器，结合申威处理器架构信息，完成了SW64后端各个移植接口的实现，移植了完整的 MC 汇编器。对移植的即时编译器进行了详细的测试验证，并获得通过，证实SW64后端在 LLVM 中移植成功。
+（2）在对 LLVM 即时编译代码生成过程耗时分析的基础上，根据SW64指令集，完成了SW64后端的快速指令选择方案，减少了代码生成需要的时间，一定程度上提升了即时编译器的性能。
+
+目前在申威平台实现的 LLVM 即时编译器已经能够通过 test-suite 测试集的所有常规测试程序，并且由 SPEC CPU2006 基准测试验证了快速指令选择方案
+
+的优化效果。由于时间关系以及处理器自身特性，运行时动态连接器RuntimeDyld暂时不支持线程私有变量的重定位。在未来的工作中，对以上功能进行实现的同时，还可以进一步优化生成的代码和提升代码生成的速度。
+
+# 参考文献
+
+[1] Mccarthy J. Recursive Functions of Symbolic Expressions and Their Computation[J]. Communications of the Acm，1960，3(4):184-195.
+[2] Just-in-time compilation[EB/OL]. https://en.wikipedia.org/wiki/Just-in-time_compilation
+[3] Mitchell J G. THE DESIGN AND CONSTRUCTION OF FLEXIBLE AND EFFICIENT INTERACTIVE PROGRAMMING SYSTEMS.[J]. 1970.
+[4] Deutsch L P，Schiffman A M . Efficient implementation of the smalltalk-80 system[C]. Acm Sigact-sigplan Symposium on Principles of Programming Languages. DBLP，1984.
+[5] Abel Avram. Apple Speeds Up WebKit’s JS Engine with LLVM JIT[EB/OL]. 2014. https://www.infoq.com/news/2014/05/safari-webkit-javascript-llvm.
+[6] Lam S K，Pitrou A，Seibert S . Numba: a LLVM-based Python JIT compiler[C]. Workshop on the Llvm Compiler Infrastructure in Hpc. ACM，2015.
+[7] Michael Larabel. PostgreSQL Begins Landing LLVM JIT Support For Faster Performance [EB/OL]. 2018. https://www.phoronix.com/scan.php?page=news_item&px $\underline { { \underline { { \mathbf { \Pi } } } } }$ PostgreSQL-LLVM-JIT-Landing.
+[8] Delporte B，Rigamonti R，Dassatti A . Toward Transparent Heterogeneous Systems[J]. 2015.
+[9] Delporte B，Rigamonti R，Dassatti A. HPA: An Opportunistic Approach to Embedded Energy Efficiency[J]. 2015.
+[10] Tsai Y H，Wu I，Liu I，et al. Improving performance of JNA by using LLVM JIT compiler[C]. IEEE/ACIS International Conference on Computer & Information Science. IEEE，2013.
+[11] Gregor M，Spalek J . Using LLVM-based JIT Compilation in Genetic Programming[C]. Elektro. IEEE，2016.
+[12] Steven S. Muchnick. Advanced compiler design implementation[M]. Morgan Kauf-mann， 1997.
+[13] Louden K C. Compiler construction[J]. Cengage Learning，1997.
+[14] Aho A V. Compilers: Principles，Techniques and Tools (for Anna University)，2/e-[M]. Pearson Education India，2003.
+[15] 编译器设计之路[M]. 机械工业出版社，2011.
+[16] The LLVM Compiler Infrastructure [EB/OL]. http://llvm.org.
+[17] Chris Lattner. LLVM [EB/OL]. http://www.aosabook.org/en/llvm.html.
+[18] Lopes B C，Auler R. Getting Started with LLVM Core Libraries[M]. Packt Publishing Ltd， 2014.
+[19] Chris Lattner. LLVM: An Infrastructure for Multi-Stage Optimization[D]. University of Illinois，2002.
+[20] Grosser T，Zheng H，Aloor R，et al. Polly-Polyhedral optimization in LLVM[C]. Proceedings
+
+of the First International Workshop on Polyhedral Compilation Techniques (IMPACT). 2011， 2011.
+[21] LLVM’s Analysis and Transform Passes [EB/OL]. http://llvm.org/docs/Passes.html.
+[22] Allen R， Kennedy K. Optimizing compilersfor modern architectures: a dependen-ce-based approach[M]. San Francisco: Morgan Kaufmann，2002.
+[23] ACM Software System Award [EB/OL]. 2012. https://awards.acm.org/award_winners/latter_ 5074762.
+[24] 董 峰. LLVM编译系统结构分析与后端移植[D]. 上海交通大学硕士论文. 2007.
+[25] 许江维. 多核DSP 的编译器及其并行编程模型的开发和研究[D].上海交通大学，2015.
+[26] 韩永杰. LLVM 编译系统结构分析及 ARCA3 后端移植[D]. 哈尔滨工业大学硕士论文.2010.
+[27] 谢虎成. 基于 LLVM 的科学计算程序自动性能预测研究[D].哈尔滨工业大学，2015.
+[28] 纪永鑫. 基于 LLVM 的无线传感器网络专用处理器编译系统研究[D]. 南开大学，2011.
+[29] Wu Yan-xia，Yang Jie，Gu Guo-chang，et al. A C2VHDL compilation algorithm of noncounting loop[C]. Advanced Computer Theory and Engineering (ICAC-TE)，Aug 2010:6-7.
+[30] 杨杰，吴艳霞，顾国昌，等. 非计数类循环的 C2VHDL 编译方法[J]. 计算机工程与应用,2010(30):65-68+89.
+[31] 郭振华，吴艳霞，张国印，等. 面向C2VHDL编译器的基本块级指针分析算法[J]. 吉林大学学报(工), v.43;No.166(2):417-423.
+[32] Zuyu Zhang，V. Joloboff，X. Zhou，et al. Fast Dynamic Translation Using LLVM On Multi-Processor Hosts[C]. Fifth Workshop on Architecture and Microarchitectural Support for Binary Translation (AMAS-BT)，in conjunction with ISCA，June 2012.
+[33] 刘刚. 基于 LLVM 的迭代间数据重用优化研究[D]. 哈尔滨工程大学，2014.
+[34] 郭振华，吴艳霞，安龙飞，等.基于 LLVM的函数内联优化技术研究[J].计算机工程与应用，2017，53(03):41-46.
+[35] 张学令. 程序优化与程序变换方法的研究[D].中国科学技术大学，2014.
+[36] 屈秋雯，梁利平.基于 LLVM 的指令并行调度与实现[J].微电子学与计算机，2013，30(11):60-63.
+[37] 徐晨晨. 基于 LLVM 的静态程序切片方法研究[D].南京邮电大学，2017.
+[38] 李昊. 基于 LLVM-Clang 的软件静态检测工具研究与实现[D].西安理工大学，2017.
+[39] 吴忧. 基于 LLVM 的 C 程序的动态数据依赖分析工具的设计与实现[D].吉林大学，2016.
+[40] 李文瑾. 基于 CEGAR 的 LLVM IR 程序验证方法与实现[D].西安电子科技大学，2017.
+[41] 邱思晨. 动态符号执行中程序插桩的研究与实现[D].西安电子科技大学，2017.
+[42] 徐栋. 基于符号化执行的插桩技术研究与实现[D].电子科技大学，2016.
+[43] 汪雷. 基于LLVM中间表示的缺陷静态分析工具实现[D].北京邮电大学，2016.
+[44] 龚丹，苏小红，王甜甜. Clang 编译平台优势分析[J].智能计算机与应用，2017，7(03):188-
+
+190+193.
+[45] 朱燕,衷璐洁.基于 LLVM 中间表示的数据依赖并行计算方法[J].计算机应用研究,2020,37(02):437-442.
+[46] 莫培弘，衷璐洁.LLVM中静态程序信息的过程间分析方法[J].计算机工程与设计，2018，39(06):1610-1618.
+[47] 吴泽智，陈性元，杨智，等.基于即时编译的动态污点跟踪优化[J].软件学报，2017，28(08):2064-2079.
+[48] Chen K H，Shen B Y，Yang W. An automatic superword vectorization in LLVM[C]. 16th Workshop on Compiler Techniques for High-Performance and Embedded Computing. 2010: 19-27.
+[49] Duncan Sands. Super-optimizing LLVM IR [EB]. 2011. http://llvm.org/devmtg/2011- 11/Sands_Super-optimizingLLVMIR.pdf
+[50] Grosser T，Groesslinger A，Lengauer C. Polly—performing polyhedral optimizations on a low-level intermediate representation[J]. Parallel Processing Letters，2012，22(04).
+[51] Min G I，Park S，Han M，et al. Getting Feedback on a Compiler"s Optimization Decisions， Enabling More Code-Optimization Opportunities[J]. 2015.
+[52] D ’ Elia ， Daniele Cono ， Demetrescu C. Flexible on-stack replacement in LLVM.[C].IEEE/ACM International Symposium on Code Generation & Optimization. IEEE，2016.
+[53] Dong S，Olivo O，Zhang L，et al. Studying the influence of standard compiler optimizations on symbolic execution[C]. IEEE International Symposium on Software Reliability Engineering. IEEE，2015.
+[54] Hariri F，Shi A，Converse H，et al. Evaluating the Effects of Compiler Optimizations on Mutation Testing at the Compiler IR Level[C]. IEEE International Symposium on Software Reliability Engineering. IEEE，2016.
+[55] Menendez D , Nagarakatte S . Termination-checking for LLVM peephole optimizations[C]. the 38th International Conference. ACM, 2016.
+[56] Asher Y B，Haber G，Stein E . A Study of Conflicting Pairs of Compiler Optimizations[C]. IEEE International Symposium on Embedded Multicore/many-core Systems-on-chip. IEEE Computer Society，2017.
+[57]Ansar K A，Saleena N. Redundancy elimination using Global Value Numbering[C]. 2017 Second International Conference on Electrical, Computer and Communication Technologies (ICECCT), Coimbatore, 2017: 1-5.
+[58] 马威，姚静波，常永胜，等.国产 CPU 发展的现状与展望[J].集成电路应用，2019，36(04):5-8.
+[59] 北斗导航卫星“龙芯”上天[J].红外，2015，36(04):50.
+[60] 马宇川.中国 CPU 兆芯 X86 处理器芯片特性及其应用[J].集成电路应用，2017，34(03):73-
+
+78.
+[61] 胡向东，杨剑新，朱英. 高性能多核处理器申威 1600[J]. 中国科学:信息科学，2015，45(4):513-522.
+[62] 生态环境和解决方案[EB/OL]. http://www.swcpu.cn/show-174-205-1.html
+[63] Gregg D，Ertl M A . Implementing an Efficient Java Interpreter[C]. International Conference on High-Performance Computing and Networking. Springer Berlin Heidelberg，2002.
+[64] Travis E. Oliphant. Python for Scientific Computing[J]. Computing in Science & Engineering， 9(3):10-20.
+[65] Chevalier-Boisvert M，Hendren L J，Verbrugge C . Optimizing Matlab through Just-In-Time Specialization[C]. Compiler Construction，International Conference，Cc，Held As Part of the Joint European Conferences on Theory & Practice of Software，Etaps，Paphos，Cyprus， March. 2010.
+[66] Lang Hames. ORC -- LLVM's Next Generation of JIT API[EB]. 2016. http://llvm.org/devmtg/2016-11/Slides/Hames-ORC.pdf
+[67] 任胜兵，卢念，张万利，等.基于 LLVM架构的NiosⅡ后端快速移植[J].计算机应用与软件，2011， $2 8 ( 1 2 ) : 2 2 - 2 5 + 5 0$ .
+[68] 张祖羽. 基于 LLVM 的 $\mathrm { C } ^ { * } \mathrm { C o r e }$ 后端移植研究[D].哈尔滨工程大学，2012.
+[69] 赵晔. 基于LLVM的交叉编译器的设计与实现[D].西安电子科技大学，2015.
+[70] 任艳珍. 基于 LLVM 的专用 CPU 后端移植分析与设计[D].成都理工大学，2017.
+[71] Rafael Auler，Edson Borin. A LLVM Just-in-Time Compilation Cost Analysis[EB]. 2013. https://www.ic.unicamp.br/~reltech/2013/13-13.pdf
+
+# 致谢
+
+光阴似箭，日月如梭，转眼间三年研究生生活即将结束。在这三年时间里，发生了很多令人难忘的事情，这也让我成长了许多。这是一个终点，更是一个新的起点。
+
+在论文完成之际，首先衷心地感谢我的导师商建东教授，感谢商老师在整个研究生期间对我的支持与帮助，为我的学业指明了前进的方向。其次，非常感谢韩林老师，感谢韩老师对我在研究与学术等各个方面的帮助，以及对我的毕业论文的悉心指导，让我获益匪浅。
+
+在南校区18号教学楼度过了三年的研究生生活，感谢九楼实验室的每一位同学，我们能够在学习和生活上互相帮助，感谢你们；感谢李盼乐、盛东浦、杨云朋、李强等师兄，感谢你们在学习上的指导以及其他的帮助；感谢二楼实验室的胡江涛、罗有才、夏文博等并肩作战的小伙伴们，我们一起共同学习，克服困难，共同进步，谢谢你们；感谢我的师弟胡伟方、黄驻峰、陈梦尧，师妹陈云、王梦园等师弟师妹们，感谢你们在各个方面提供的帮助；感谢实验室的韩璞博士，韩博士见多识广，感谢韩博士的学习与生活上的指导和帮助。
+
+在无锡完成了论文的主要研究内容，感谢在无锡实习期间的各位同事和领导，不仅提供了实验的基础环境，还在工作上毫无保留地教我们技术，衷心地感谢你们。感谢在此期间一同奋斗的小伙伴们，我们相互支持，相互鼓励，团结协作，谢谢你们。
+
+没有一个冬天不会过去，没有一个春天不会到来。2020开年，由 COVID-19病毒感染的肺炎爆发，疫情将我们封锁在各自的家中，对每个人产生了巨大的影响。感谢政府采取的果断措施，以及社会主义制度集中力量办大事的优势，及时将疫情控制住，避免了大规模爆发，感谢在此期间默默奉献和付出的每一个人。
+
+感谢我的父母和亲人，感谢你们始终如一的支持与鼓励，让我不断进取、砥砺前行。
+
+最后，祝愿各位师长身体健康、万事如意，也祝愿我们仗剑天涯，不忘初心，归来仍是少年。

@@ -1,120 +1,228 @@
-<h1 id="udp">UDP加速</h1>
-<h2 id="hysteria2udp2raw">Hysteria2+udp2raw</h2>
-<h3 id="hysteria2">Hysteria2</h3>
-<h4 id="server">Server</h4>
-<div class="codehilite"><pre><span></span><code><span class="c1"># 安装</span>
-bash<span class="w"> </span>&lt;<span class="o">(</span>curl<span class="w"> </span>-fsSL<span class="w"> </span>https://get.hy2.sh/<span class="o">)</span>
-<span class="c1"># 生成自签名证书</span>
-openssl<span class="w"> </span>req<span class="w"> </span>-x509<span class="w"> </span>-nodes<span class="w"> </span>-newkey<span class="w"> </span>ec:&lt;<span class="o">(</span>openssl<span class="w"> </span>ecparam<span class="w"> </span>-name<span class="w"> </span>prime256v1<span class="o">)</span><span class="w"> </span>-keyout<span class="w"> </span>/etc/hysteria/server.key<span class="w"> </span>-out<span class="w"> </span>/etc/hysteria/server.crt<span class="w"> </span>-subj<span class="w"> </span><span class="s2">&quot;/CN=bing.com&quot;</span><span class="w"> </span>-days<span class="w"> </span><span class="m">36500</span>
-<span class="c1"># 记录指纹</span>
-openssl<span class="w"> </span>x509<span class="w"> </span>-noout<span class="w"> </span>-fingerprint<span class="w"> </span>-sha256<span class="w"> </span>-in<span class="w"> </span>/etc/hysteria/server.crt
-chown<span class="w"> </span>hysteria<span class="w"> </span>/etc/hysteria/server.key<span class="w"> </span>
-chown<span class="w"> </span>hysteria<span class="w"> </span>/etc/hysteria/server.crt
-<span class="c1"># 写配置</span>
-cat<span class="w"> </span>&gt;<span class="w"> </span>/etc/hysteria/config.yaml<span class="w"> </span><span class="s">&lt;&lt; EOF</span>
-<span class="s">listen: :8443 #监听端口</span>
-
-<span class="s">#有域名，使用CA证书 </span>
-<span class="s">#acme:</span>
-<span class="s">#  domains:</span>
-<span class="s">#    - test.heybro.bid #你的域名，需要先解析到服务器ip</span>
-<span class="s">#  email: augustdoit@gmail.com</span>
-
-<span class="s">#使用自签名证书</span>
-<span class="s">tls:</span>
-<span class="s">  cert: /etc/hysteria/server.crt</span>
-<span class="s">  key: /etc/hysteria/server.key</span>
-
-<span class="s">auth:</span>
-<span class="s">  type: password</span>
-<span class="s">  password: 020124 #设置认证密码</span>
-
-<span class="s">#伪装</span>
-<span class="s">masquerade:</span>
-<span class="s">  type: proxy</span>
-<span class="s">  proxy:</span>
-<span class="s">    url: https://bing.com/ #伪装网址</span>
-<span class="s">    rewriteHost: true</span>
-<span class="s">EOF</span>
-<span class="c1"># 启用服务</span>
-systemctl<span class="w"> </span><span class="nb">enable</span><span class="w"> </span>hysteria-server
-systemctl<span class="w"> </span>restart<span class="w"> </span>hysteria-server
-</code></pre></div>
-
-<p>端口跳跃配置</p>
-<div class="codehilite"><pre><span></span><code><span class="c1"># 端口跳跃</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">WAN_IF</span><span class="o">=</span><span class="s2">&quot;ens3&quot;</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">HY2_DST_PORT</span><span class="o">=</span><span class="s2">&quot;8443&quot;</span>
-iptables<span class="w"> </span>-t<span class="w"> </span>nat<span class="w"> </span>-A<span class="w"> </span>PREROUTING<span class="w"> </span>-i<span class="w"> </span><span class="si">${</span><span class="nv">WAN_IF</span><span class="si">}</span><span class="w"> </span>-p<span class="w"> </span>udp<span class="w"> </span>--dport<span class="w"> </span><span class="m">20000</span>:30000<span class="w"> </span>-j<span class="w"> </span>REDIRECT<span class="w"> </span>--to-ports<span class="w"> </span><span class="si">${</span><span class="nv">HY2_DST_PORT</span><span class="si">}</span>
-ip6tables<span class="w"> </span>-t<span class="w"> </span>nat<span class="w"> </span>-A<span class="w"> </span>PREROUTING<span class="w"> </span>-i<span class="w"> </span><span class="si">${</span><span class="nv">WAN_IF</span><span class="si">}</span><span class="w"> </span>-p<span class="w"> </span>udp<span class="w"> </span>--dport<span class="w"> </span><span class="m">20000</span>:30000<span class="w"> </span>-j<span class="w"> </span>REDIRECT<span class="w"> </span>--to-ports<span class="w"> </span><span class="si">${</span><span class="nv">HY2_DST_PORT</span><span class="si">}</span>
-<span class="nb">unset</span><span class="w"> </span>WAN_IF
-<span class="nb">unset</span><span class="w"> </span>HY2_DST_PORT
-</code></pre></div>
-
-<h4 id="client">Client</h4>
-<div class="codehilite"><pre><span></span><code>bash<span class="w"> </span>&lt;<span class="o">(</span>curl<span class="w"> </span>-fsSL<span class="w"> </span>https://get.hy2.sh/<span class="o">)</span>
-<span class="c1"># 切换为客户端模式</span>
-sed<span class="w"> </span>-i<span class="w"> </span><span class="s2">&quot;s/hysteria server/hysteria client/g&quot;</span><span class="w"> </span>/etc/systemd/system/hysteria-server.service
-sed<span class="w"> </span>-i<span class="w"> </span><span class="s2">&quot;s/hysteria server/hysteria client/g&quot;</span><span class="w"> </span>/etc/systemd/system/hysteria-server@.service
-mv<span class="w"> </span>/etc/systemd/system/hysteria-server.service<span class="w"> </span>/etc/systemd/system/hysteria-client.service
-<span class="c1"># 写配置</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">HY2_SERVER</span><span class="o">=</span><span class="s2">&quot;203.0.113.10:20000-30000&quot;</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">HY2_AUTH</span><span class="o">=</span><span class="s2">&quot;020124&quot;</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">HY2_REMOTE_PORT</span><span class="o">=</span><span class="s2">&quot;51280&quot;</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">HY2_LISTEN_PORT</span><span class="o">=</span><span class="s2">&quot;51283&quot;</span>
-cat<span class="w"> </span>&gt;<span class="w"> </span>/etc/hysteria/config.yaml<span class="w"> </span><span class="s">&lt;&lt; EOF </span>
-<span class="s">server: ${HY2_SERVER}</span>
-<span class="s">auth: ${HY2_AUTH}</span>
-<span class="s">tls:</span>
-<span class="s">  insecure: true</span>
-<span class="s">  pinSHA256: 5C:33:AD:AF:A5:FB:B4:6B:0B:AE:99:24:B2:9D:DD:49:9D:B9:02:F3:21:54:06:C5:9C:A7:81:85:BF:B4:58:9E</span>
-<span class="s">bandwidth:</span>
-<span class="s">  up: 60 mbps</span>
-<span class="s">  down: 200 mbps</span>
-<span class="s">socks5:</span>
-<span class="s">  listen: 127.0.0.1:1080</span>
-<span class="s">udpForwarding:</span>
-<span class="s">  - listen: 127.0.0.1:${HY2_LISTEN_PORT}</span>
-<span class="s">    remote: 127.0.0.1:${HY2_REMOTE_PORT}</span>
-<span class="s">    timeout: 20s</span>
-<span class="s">EOF</span>
-<span class="nb">unset</span><span class="w"> </span>HY2_SERVER
-<span class="nb">unset</span><span class="w"> </span>HY2_AUTH
-<span class="nb">unset</span><span class="w"> </span>HY2_REMOTE_PORT
-<span class="nb">unset</span><span class="w"> </span>HY2_LISTEN_PORT
-<span class="c1"># 启用服务</span>
-systemctl<span class="w"> </span><span class="nb">enable</span><span class="w"> </span>hysteria-client
-systemctl<span class="w"> </span>restart<span class="w"> </span>hysteria-client
-</code></pre></div>
-
-<h3 id="udp2raw">udp2raw</h3>
-<h4 id="server_1">Server</h4>
-<div class="codehilite"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">SERVICE_PORT</span><span class="o">=</span><span class="s2">&quot;51280&quot;</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">COMM_PORT</span><span class="o">=</span><span class="s2">&quot;51281&quot;</span>
-
-./udp2raw_amd64<span class="w"> </span><span class="se">\</span>
--s<span class="w"> </span><span class="se">\</span>
--l0.0.0.0:<span class="si">${</span><span class="nv">COMM_PORT</span><span class="si">}</span><span class="w"> </span><span class="se">\</span>
--r127.0.0.1:<span class="si">${</span><span class="nv">SERVICE_PORT</span><span class="si">}</span><span class="w"> </span><span class="se">\</span>
--k<span class="w"> </span><span class="s2">&quot;020124&quot;</span><span class="w"> </span><span class="se">\</span>
---raw-mode<span class="w"> </span>faketcp<span class="w"> </span><span class="se">\</span>
---cipher-mode<span class="w"> </span>xor<span class="w"> </span><span class="se">\</span>
--a
-</code></pre></div>
-
-<h4 id="client_1">Client</h4>
-<div class="codehilite"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">COMM_PORT</span><span class="o">=</span><span class="s2">&quot;51281&quot;</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">CLIENT_LISTEN_PORT</span><span class="o">=</span><span class="s2">&quot;51281&quot;</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">SERVER_IP</span><span class="o">=</span><span class="s2">&quot;203.0.113.10&quot;</span>
-
-./udp2raw_amd64<span class="w"> </span><span class="se">\</span>
--c<span class="w"> </span><span class="se">\</span>
--l0.0.0.0:<span class="si">${</span><span class="nv">CLIENT_LISTEN_PORT</span><span class="si">}</span><span class="w"> </span><span class="se">\</span>
--r<span class="si">${</span><span class="nv">SERVER_IP</span><span class="si">}</span>:<span class="si">${</span><span class="nv">COMM_PORT</span><span class="si">}</span><span class="w"> </span><span class="se">\</span>
--k<span class="w"> </span><span class="s2">&quot;020124&quot;</span><span class="w"> </span><span class="se">\</span>
---raw-mode<span class="w"> </span>faketcp<span class="w"> </span><span class="se">\</span>
---cipher-mode<span class="w"> </span>xor<span class="w"> </span><span class="se">\</span>
--a
-</code></pre></div>
-
-<p>建议把上层的MTU设成1200</p>
+<h1 id="pn">PN结</h1>
+<h2 id="_1">前置知识</h2>
+<h3 id="_2">半导体</h3>
+<p>元素周期表左侧的金属元素组成导体。金属导体可以导电，因为金属元素原子最外层的电子容易挣脱原子核的束缚，并在外电场的作用下产生定向移动，这样就可以形成电流。而绝缘体中的电子很难自由移动，因此表现为导电性极差。</p>
+<p>半导体中原子核对电子的束缚能力既没有绝缘体那么强，也没有导体那么弱，因此其导电性位于导体与绝缘体之间。</p>
+<h3 id="_3">本征半导体的导电机理</h3>
+<p>将硅、锗等元素制成<strong>纯净</strong>的单晶体，就得到本征半导体。其中，极少数电子在常温下由于热运动而激发为自由电子，从而在共价键中留下一个空位置（空穴）。正因如此，本征半导体中的自由电子与空穴总是数目相等。</p>
+<p>在外电场的作用下，（<strong>热运动激发</strong>产生的）自由电子与空穴定向移动，从而产生电流。</p>
+<h3 id="_4">杂质半导体</h3>
+<p>将本征半导体进行掺杂，即可得到杂质半导体。</p>
+<h4 id="p">P型半导体</h4>
+<p>P型半导体是硅晶体掺杂微量的+3价元素（往往是铟或铝）形成的，而+3价元素相较于硅缺少一个电子，因此P型半导体的晶体结构中存在“空穴”。</p>
+<h4 id="n">N型半导体</h4>
+<p>N型半导体是硅晶体掺杂微量的+5价元素（往往是砷、磷、锑等）形成的，而+5价元素相较于硅缺多一个电子，因此N型半导体的晶体结构中存在自由电子。</p>
+<p>空穴、自由电子均可作为“载流子”，让电流流过。因此，通过控制掺杂的浓度，就可以控制杂质半导体的导电性能。对于P型半导体，其自由电子数目远多于空穴数目，因此称自由电子为“多子”，空穴为“少子”；相应地，称N型半导体中的空穴为多子，自由电子为少子。</p>
+<h3 id="_5">其他术语</h3>
+<ul>
+<li>
+<p><strong>扩散运动：</strong>由于粒子浓度差而产生的总体的运动趋势</p>
+</li>
+<li>
+<p><strong>漂移运动：</strong>在电场力的作用下，载流子的运动</p>
+</li>
+<li><strong>非平衡少子：</strong></li>
+<li><strong>平衡少子：</strong></li>
+<li><strong>多子：</strong>掺杂产生的载流子</li>
+<li><strong>少子：</strong>本征发产生的载流子</li>
+</ul>
+<h2 id="pn_1">PN结</h2>
+<p>PN结由P型半导体与N型半导体组成。P型半导体与N型半导体的交接面形成PN结。</p>
+<h3 id="pn_2">PN结的形成机理</h3>
+<ul>
+<li>由于<strong>扩散</strong>作用，在P型半导体与N型半导体的界面附近，自由电子与空穴会自发地结合。</li>
+<li>随着扩散与结合的进行，界面处不断消耗P型半导体的自由电子，从而离界面稍远侧的P型半导体逐渐开始显正电性；相应地，离界面稍远侧的N型半导体逐渐开始显负电性。</li>
+<li>
+<p>于是，在界面附近就会产生<strong>内电场</strong>，阻碍P型半导体中的自由电子向N侧扩散，以及N型半导体中的空穴向P侧扩散。</p>
+</li>
+<li>
+<p>在不考虑少子的情况下，随着内电场强度的增加，扩散会最终停止（本质是一种动态平衡），并在PN结附近形成既不含有空穴、也不含有自由电子的<strong>空间电荷区</strong>，也叫<strong>耗尽区</strong>。</p>
+</li>
+<li>掺杂浓度越高，耗尽区宽度越窄</li>
+</ul>
+<p><img src="https://rawghuc.020124.xyz/DreamChaser-luzeyu/MyPic/master/PC/misc/image-20240413193234314.png" alt="image-20240413193234314" style="zoom: 67%;" /></p>
+<p>更准确地说，当耗尽区不再扩大时，其中不再含有掺杂产生的多子，而只有类似本征激发而产生的少子。少子在内电场作用下会向耗尽区边缘移动。在耗尽区不再扩大时，参与扩散的多子与耗尽区的少子在耗尽区达到<strong>动态平衡</strong>。</p>
+<h3 id="pn_3">PN结的正向导电</h3>
+<p>给PN结的P型半导体接上电源正极，N型半导体接上电源负极，称PN结外加<strong>正向电压</strong>，也叫<strong>正向偏置</strong>。</p>
+<p>在PN结外加正向电压时，外电场方向与内电场方向相反，因此自由电子与空穴有会被外电场“推向”耗尽区的趋势。如果外电场在空间电荷区产生的电场强度大于内电场强度，空间电荷区的总体电场方向改变，自由电子与空穴的“结合”将在两种半导体的交接面<strong>持续进行</strong>，从而形成正向电流。</p>
+<p><strong>个人分析理解：</strong>因此，可以说，PN结的正向导电机理是两种载流子在两种半导体的交接面持续地“湮灭”产生的。</p>
+<p><img src="https://rawghuc.020124.xyz/DreamChaser-luzeyu/MyPic/master/PC/misc/image-20240413194634397.png" alt="image-20240413194634397" style="zoom:67%;" /></p>
+<h3 id="pn_4">PN结的反向截止</h3>
+<p>给PN结的P型半导体接上电源负极，N型半导体接上电源正极，称PN结外加<strong>反向电压</strong>，也叫<strong>反向偏置</strong>。</p>
+<p>在PN结外加反向电压时，外电场方向与内电场方向相同，因此自由电子与空穴会被外电场“推向”远离界面的两侧，从而耗尽层将进一步扩大。</p>
+<p><img src="https://rawghuc.020124.xyz/DreamChaser-luzeyu/MyPic/master/PC/misc/image-20240504163228916.png" alt="image-20240504163228916" style="zoom:67%;" /></p>
+<p><strong>个人分析理解：</strong>换一种角度理解，以P区为例，尽管P区还有空穴，但是由于P区显负电性，对电子具有排斥的倾向，因此尽管有外加电源，其中的空穴仍不会全部与电子湮灭。</p>
+<p>当反向电流足够大时，PN结也可以发生反向击穿。根据二极管的掺杂浓度等特性的不同，可能发生<strong>齐纳击穿</strong>或<strong>雪崩击穿</strong>。</p>
+<p>下文简单概括了两种击穿的机理。</p>
+<h4 id="_6">齐纳击穿</h4>
+<p>如果半导体的掺杂浓度较高，其耗尽层很窄，那么很小的电压就能在耗尽区感应出很强的电场，从而<strong>直接破坏共价键</strong>，产生电子-空穴对。</p>
+<p>齐纳击穿本质上是靠<strong>电场力</strong>来破坏共价键的。</p>
+<h4 id="_7">雪崩击穿</h4>
+<p>如果半导体的掺杂浓度较低，其耗尽层很宽，那么在反向电压较低时就不会产生齐纳击穿。在反向电压较高时，耗尽层中的少子会在电场中被加速，从而带有很高的能量，能够把价电子撞出共价键，形成电子-空穴对。被撞出来的价电子又会撞出更多的电子，从而使得载流子“雪崩”式地增加。</p>
+<p>雪崩击穿本质上是靠<strong>电子动能</strong>来破坏共价键的。</p>
+<h3 id="pn_5">PN结的电容效应</h3>
+<p>待补充</p>
+<h1 id="_8">常用的晶体管元件</h1>
+<h2 id="_9">二极管</h2>
+<p>略去</p>
+<h2 id="_10">稳压二极管</h2>
+<p>稳压二极管在反向击穿的时候，在一定的电流范围，其两端电压几乎不变。我们常在稳压电源等电路中利用它的这个性质。</p>
+<p><img src="posts/电子工程/模电 PN结笔记.assets/image-20240504221234173.png" alt="image-20240504221234173" style="zoom:67%;" /></p>
+<p>图<sup id="fnref:稳压二极管"><a class="footnote-ref" href="#fn:稳压二极管">4</a></sup> (a)展示了稳压二极管的伏安特性曲线，可见其反向击穿时的曲线十分陡峭。</p>
+<p>图<sup id="fnref2:稳压二极管"><a class="footnote-ref" href="#fn:稳压二极管">4</a></sup> (b)展示了稳压二极管的等效电路。</p>
+<ul>
+<li>接入正向电压或反向电压未击穿时，其可以等效为二极管D~1~</li>
+<li>反向击穿时，其可以等效为D~2~、U~z~、r~d~的串联电路，其中D~2~为理想二极管（无内阻，正向击穿电压为0V，反向不导电），U~z~为电压源</li>
+<li>当D~2~左侧电压高于右侧（即反向电压高于U~z~）时，D~2~正向导通</li>
+<li>D~2~导通后，电流每增加$\Delta i$，等效电路两端电压增加$\Delta i \times r_d$，由于$r_d$很小，因此等效电路两端电压增加不大</li>
+</ul>
+<h2 id="_11">晶体三极管</h2>
+<h3 id="_12">结构</h3>
+<p>使用不同的掺杂方式在同一个硅片上制造出三个掺杂区域，从而形成两个PN结，这样就构成了晶体三极管。</p>
+<p><img src="https://rawghuc.020124.xyz/DreamChaser-luzeyu/MyPic/master/PC/misc/image-20240505153704460.png" alt="image-20240505153704460" style="zoom:67%;" /></p>
+<p>图<sup id="fnref:晶体三极管"><a class="footnote-ref" href="#fn:晶体三极管">5</a></sup>展示了晶体三极管的结构与符号。如图<sup id="fnref2:晶体三极管"><a class="footnote-ref" href="#fn:晶体三极管">5</a></sup> (a)所示，位于中间的区域称为<strong>基区</strong>，它很薄且掺杂浓度很低；位于上层的区域是<strong>发射区</strong>，掺杂浓度很高；位于下方的区域是<strong>集电区</strong>，其面积很大。</p>
+<p>由于基区掺杂浓度低，且发射区掺杂浓度高，因此，由于扩散运动，有大量自由电子越过发射结到达基区。</p>
+<p>这三个区域引出三个电极：<strong>基极（b, base）</strong>、<strong>发射极（e, emitter）</strong>、<strong>集电极（c, collector）</strong></p>
+<p><strong>个人分析理解：</strong>三极管符号中的箭头方向指向<strong>发射结</strong>（基区与发射区形成的PN结）<strong>正向</strong>导通的电流方向。</p>
+<h3 id="_13">功能</h3>
+<p>三极管是一种使用<strong>电流控制电流</strong>的元件，其鲜明的特征是具有<strong>对电流的放大作用</strong>。</p>
+<p><img src="https://rawghuc.020124.xyz/DreamChaser-luzeyu/MyPic/master/PC/misc/image-20240505155202944.png" alt="image-20240505155202944" style="zoom:67%;" /></p>
+<p>图片<sup id="fnref:基本共射放大电路"><a class="footnote-ref" href="#fn:基本共射放大电路">6</a></sup>展示了使用NPN三极管的基本共射放大电路。其中，基极-发射极回路被称作<strong>输入回路</strong>；集电极-发射极回路被成为<strong>输出回路</strong>。</p>
+<p>在此电路中，$\Delta u_1$是被放大的信号，被放大后的信号为$u_0$。</p>
+<p>由于发射极是两个回路的公共端，因此这种电路被称作<strong>共射</strong>放大电路。</p>
+<h3 id="_14">原理</h3>
+<p><img src="https://rawghuc.020124.xyz/DreamChaser-luzeyu/MyPic/master/PC/misc/image-20240505184253122.png" alt="image-20240505184253122" style="zoom: 67%;" /></p>
+<p>图<sup id="fnref:三极管内部原理"><a class="footnote-ref" href="#fn:三极管内部原理">7</a></sup>展示了正常工作的三极管内部载流子的运动。图中，三极管左侧电极为基极，三极管下侧电极为发射极，三极管上部电极为集电极。</p>
+<h4 id="_15">内部电流机理</h4>
+<p>在图<sup id="fnref2:三极管内部原理"><a class="footnote-ref" href="#fn:三极管内部原理">7</a></sup>展示的接法中：</p>
+<ul>
+<li>三极管发射结被施加正向电压，由于基区掺杂浓度低、发射区掺杂浓度高，且受电场力作用，因此有<strong>大量发射区载流子越过发射结到达基区</strong>（主要，扩散运动与漂移运动共同作用），以及<strong>少量基区载流子越过发射结到达发射区</strong>（次要，漂移运动），形成<strong>发射极电流$I_E$。</strong></li>
+<li>图中基区载流子的漂移运动产生的电流为$I_{EP}$，发射区载流子扩散运动产生的电流为$I_{EN}$</li>
+<li>$I_E = I_{EP} + I_{EN}$</li>
+<li>在电场力作用下，从发射区扩散到基区的<strong>非平衡“少子”不断与基区载流子复合</strong>（主要）以及<strong>少量基区载流子越过发射结到达发射区和集电区</strong>（次要，漂移运动），形成<strong>基极电流$I_B$</strong>。由于基区掺杂浓度低，这部分电流较小。</li>
+<li>从发射区扩散到基区的非平衡“少子”不断与基区载流子复合产生的电流为$I_{BN}$</li>
+<li>载流子越过集电结的漂移运动产生的电流为$I_{CBO}$</li>
+<li>载流子越过发射结的漂移运动产生的电流为$I_{EP}$</li>
+<li>$I_B + I_{CBO} = I_{BN} + I_{EP}$，一般情况下$I_B \gg I_{CBO}$，因此将$I_B + I_{CBO}$记作$I'_B$</li>
+<li>由于基区的掺杂浓度低，发射区扩散至基区的<strong>基区非平衡“少子”</strong>不会全部与基区的载流子复合，<strong>大部分</strong>会<strong>在电场力的作用下越过集电结并进入集电区</strong>（主要，漂移运动），基区的其他载流子也会越过集电结进入集电区（次要，漂移运动），形成<strong>集电极电流$I_C$</strong>。</li>
+<li>发射区扩散至基区的基区非平衡“少子”在电场力的作用下越过集电结并进入集电区产生的电流为$I_{CN}$</li>
+<li>基区的平衡少子越过集电结进入集电区产生的电流为$I_{CBO}$</li>
+<li>$I_C = I_{CBO} + I_{CN}$</li>
+</ul>
+<h4 id="_16">计算</h4>
+<p>在图[^三极管的内部原理]所示的电路中，我们容易得出，在三极管外部，$I_E=I_B+I_C$.</p>
+<p>我们记电流$I_{CN}$与$I'<em CN="CN">B$之比为<strong>共射直流电流放大系数$\overline{\beta}$</strong>，于是有
+$$
+\overline{\beta} = \frac{I</em>{I'}<em CBO="CBO">B} = \frac{I_C - I</em>
+$$}}{I_B + I_{CBO}</p>
+<p>整理可得$I_C = \overline{\beta}I_B + (1 + \overline{\beta})I_{CBO}$，记$I_{CEO} = (1+\overline{\beta})I_{CBO}$，于是有$$I_C = \overline{\beta}I_B + I_{CEO} \tag{1}$$，我们称$I_{CEO}$为<strong>穿透电流</strong>。</p>
+<ul>
+<li>当基极开路（即$I_B = 0$）时，$I_C = I_E = I_{CEO}$，因此穿透电流$I_{CEO}$的物理意义为<strong>基极开路时集电结的反向饱和电流</strong></li>
+<li>当发射极开路（即$I_E = 0$）时，$I_{EP} = I_{EN} = 0$，容易看出电流$I_{CBO}$是<strong>发射极开路时集电结的反向饱和电流</strong></li>
+</ul>
+<p>由于通常情况$I_B \gg I_{CBO}$因此有$I_C \approx \overline{\beta}I_B$，从而有</p>
+<p>$$
+I_E \approx (1 + \overline{\beta})I_B \label{my_eq}
+$$</p>
+<p>因此，称三极管为<strong>电流控制元件</strong>。</p>
+<h4 id="_17">总结</h4>
+<ul>
+<li>发射区掺杂浓度高；基区很薄且掺杂浓度低</li>
+<li>正常工作时，<strong>发射结</strong>被施加<strong>正向电压</strong>，<strong>集电结</strong>被施加<strong>反向电压</strong></li>
+<li>发射极电流与基极电流大致成倍数关系</li>
+</ul>
+<h2 id="_18">场效应管</h2>
+<p>场效应管（FET, Field Effect Transistor）是利用输入回路的<strong>电场效应</strong>来控制输出回路<strong>电流</strong>的一种半导体器件。此类元件仅依靠半导体中的多数载流子导电，因此也称作<strong>单极型晶体管</strong>。</p>
+<h3 id="_19">结型场效应管</h3>
+<p><img src="https://rawghuc.020124.xyz/DreamChaser-luzeyu/MyPic/master/PC/misc/image-20240509204409365.png" alt="image-20240509204409365" style="zoom:67%;" /></p>
+<p>图[^ 结型场效应管结构] (a)展示了N沟道的结型场效应管的结构示意图。其中，两块P区半导体掺杂浓度高，它们连在一起作为<strong>栅极（g, gate）</strong>；两块N区半导体作为<strong>漏极（d, drain）</strong>和<strong>源极（s, source）</strong>。</p>
+<p><img src="https://rawghuc.020124.xyz/DreamChaser-luzeyu/MyPic/master/PC/misc/image-20240509204957130.png" alt="image-20240509204957130" style="zoom: 67%;" /><sup id="fnref:N沟道结型场效应管结构示意图"><a class="footnote-ref" href="#fn:N沟道结型场效应管结构示意图">12</a></sup></p>
+<p>为便于理解，使用图<sup id="fnref2:N沟道结型场效应管结构示意图"><a class="footnote-ref" href="#fn:N沟道结型场效应管结构示意图">12</a></sup>来更清晰地说明。</p>
+<h4 id="_20">原理</h4>
+<p>在结型场效应管正常工作时，图<sup id="fnref3:N沟道结型场效应管结构示意图"><a class="footnote-ref" href="#fn:N沟道结型场效应管结构示意图">12</a></sup>中阴影部分的耗尽层承受反向电压。我们通过控制栅极-源极电压$|u_{GS}|$、栅极-漏极电压$|u_{DS}|$实现对导电沟道的控制。</p>
+<h5 id="u_ds-0vu_gs">源极、漏极短路，即$u_{DS} = 0V$时，$u_{GS}$对导电沟道的控制作用</h5>
+<p><img src="posts/电子工程/模电 PN结笔记.assets/image-20240509210351763.png" alt="image-20240509210351763" style="zoom:67%;" /></p>
+<p>图<sup id="fnref:源极漏极短路时的导电沟道"><a class="footnote-ref" href="#fn:源极漏极短路时的导电沟道">9</a></sup>展示了$u_{DS} = 0V$时，$u_{GS}$对导电沟道的控制作用。如图所示，随着$|u_{GS}|$的增大，耗尽层逐渐变宽，导电沟道逐渐变窄，直至$|U_{GS}|$增大到某一个数值，导电沟道完全消失，此时源极与漏极的电阻趋于无穷大。我们称此时$|u_{GS}|$的数值为夹断电压$U_{GS(off)}$。</p>
+<h5 id="u_gs0vu_gsoffu_ds">$|u_{GS}|$在0V到$U_{GS(off)}$之间时，$u_{DS}$对导电沟道的控制作用</h5>
+<p><img src="https://rawghuc.020124.xyz/DreamChaser-luzeyu/MyPic/master/PC/misc/image-20240509211937972-17153278486991.png" alt="image-20240509211937972" style="zoom:67%;"  alt="test"/></p>
+<p>当$|u_{GS}| \neq 0V$时，沟道中的电压不再处处相等，栅极g与漏极d的电压差最大，如图<sup id="fnref:源极-漏极电压对导电沟道的影响"><a class="footnote-ref" href="#fn:源极-漏极电压对导电沟道的影响">10</a></sup>的电路接法所示，因此靠近漏极一侧的耗尽区更宽，导电沟道更窄。</p>
+<p>根据图中的电路，容易得出：
+$$
+|u_{GD}| = |u_{DS}| + |u_{GS}|  \label{ugd_eq}
+$$</p>
+<ul>
+<li><strong>$|u_{DS}|$小于$|U_{GS(off)}|$时</strong>，随着$|u_{DS}|$的增大，$|u_{GD}|$增大，漏极d一侧的耗尽层变宽，导电沟道变窄，如图<sup id="fnref2:源极-漏极电压对导电沟道的影响"><a class="footnote-ref" href="#fn:源极-漏极电压对导电沟道的影响">10</a></sup> (a)所示</li>
+<li>沟道未夹断时，沟道的电阻基本由$|u_{GS}|$决定，因此<strong>漏极电流大小$|i_d|$随着$|u_{GS}|$增大而增大</strong></li>
+<li>我们称此工作区为<strong>可变电阻区（非饱和区）</strong></li>
+<li>直至<strong>$|u_{GD}|$达到$|U_{GS(off)}|$</strong>，此时导电沟道在漏极d一侧被夹断，如图<sup id="fnref3:源极-漏极电压对导电沟道的影响"><a class="footnote-ref" href="#fn:源极-漏极电压对导电沟道的影响">10</a></sup> (b)所示，我们称这种情况为<strong>预夹断</strong></li>
+<li>沟道夹断后，$|u_{GS}|$越大，夹断区越长，沟道的电阻也随之增大</li>
+<li>由式$\eqref{ugd_eq}$，此时$|u_{DS}| = |u_{GS}| - |U_{GS(off)}|$</li>
+<li><strong>$|u_{GD}|$大于$|U_{GS(off)}|$时</strong>，随着$|u_{DS}|$的进一步加大，夹断区开始加长，如图<sup id="fnref4:源极-漏极电压对导电沟道的影响"><a class="footnote-ref" href="#fn:源极-漏极电压对导电沟道的影响">10</a></sup> (c)所示</li>
+<li>随着$|u_{DS}|$增大，源极s与漏极d之间的电场强度增大，而根据式$\eqref{ugd_eq}$，$|U_{GD}|$也随之增大，即夹断区对电荷移动造成的阻力增大，两种趋势互相抵消</li>
+<li>预夹断后，$|u_{GS}|$增大，漏极电流$|i_d|$几乎不变，此时表现出恒流特性</li>
+<li>当$|u_{DS}|$确定时，对于给定的$|u_{GS}|$，就有确定的$|i_{d}|$</li>
+<li>我们称此工作区为<strong>恒流区（饱和区）</strong></li>
+<li><strong>$|u_{GS}| \gt |U_{GS(off)}|$时</strong>，靠近源极s一侧的导电沟道也已被夹断，如图<sup id="fnref4:N沟道结型场效应管结构示意图"><a class="footnote-ref" href="#fn:N沟道结型场效应管结构示意图">12</a></sup> (c)所示，即使$|u_{DS}| = 0V$，导电沟道也完全被夹断</li>
+<li>我们称此工作区为<strong>夹断区</strong></li>
+</ul>
+<p><img src="https://rawghuc.020124.xyz/DreamChaser-luzeyu/MyPic/master/PC/misc/image-20240509225656004.png" alt="image-20240509225656004" style="zoom:67%;" /><sup id="fnref:场效应管的输出特性"><a class="footnote-ref" href="#fn:场效应管的输出特性">11</a></sup></p>
+<p>因此，我们称场效应管为<strong>电压控制元件</strong>，因为其源极-漏极电流是受到源极-栅极电压控制的。</p>
+<h4 id="_21">总结</h4>
+<ul>
+<li>栅极g半导体掺杂浓度高</li>
+<li>耗尽层承受反向电压</li>
+<li>栅极-漏极耗尽层更宽；栅极-源极耗尽层较窄</li>
+<li>定性地看：</li>
+<li>源极-漏极电压固定时，源极-栅极电压绝对值越大，源极-漏极的导电能力就越差</li>
+<li>
+<p>源极-栅极电压固定时，源极-漏极电压绝对值越大，源极-漏极的导电能力就越差</p>
+</li>
+<li>
+<p>结型场效应管的几个工作区</p>
+</li>
+</ul>
+<h3 id="mos">MOS管</h3>
+<p>MOS管全称<strong>金属氧化物半导体场效应管（MOS, Metal Oxide Semiconductor FET）</strong>，其中“氧化物”指栅极与半导体之间的二氧化硅绝缘层。</p>
+<p>相较于结型场效应管，MOS管的栅极与半导体基板之间被SiO~2~隔开，因此其<strong>栅极-源极电阻较结型场效应管更大</strong>。MOS管被广泛应用在大规模集成电路中。</p>
+<h1 id="_22">参考文献</h1>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:PN结的形成">
+<p>图片来自童诗白 华成英《模拟电子技术基础 第四版》P13&#160;<a class="footnote-backref" href="#fnref:PN结的形成" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:PN结的正向导通">
+<p>图片来自童诗白 华成英《模拟电子技术基础 第四版》P14&#160;<a class="footnote-backref" href="#fnref:PN结的正向导通" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:PN结的反向截止">
+<p>图片来自童诗白 华成英《模拟电子技术基础 第四版》P15&#160;<a class="footnote-backref" href="#fnref:PN结的反向截止" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+<li id="fn:稳压二极管">
+<p>图片来自童诗白 华成英《模拟电子技术基础 第四版》P24&#160;<a class="footnote-backref" href="#fnref:稳压二极管" title="Jump back to footnote 4 in the text">&#8617;</a><a class="footnote-backref" href="#fnref2:稳压二极管" title="Jump back to footnote 4 in the text">&#8617;</a></p>
+</li>
+<li id="fn:晶体三极管">
+<p>图片来自童诗白 华成英《模拟电子技术基础 第四版》P29&#160;<a class="footnote-backref" href="#fnref:晶体三极管" title="Jump back to footnote 5 in the text">&#8617;</a><a class="footnote-backref" href="#fnref2:晶体三极管" title="Jump back to footnote 5 in the text">&#8617;</a></p>
+</li>
+<li id="fn:基本共射放大电路">
+<p>图片来自童诗白 华成英《模拟电子技术基础 第四版》P29&#160;<a class="footnote-backref" href="#fnref:基本共射放大电路" title="Jump back to footnote 6 in the text">&#8617;</a></p>
+</li>
+<li id="fn:三极管内部原理">
+<p>图片来自童诗白 华成英《模拟电子技术基础 第四版》P30&#160;<a class="footnote-backref" href="#fnref:三极管内部原理" title="Jump back to footnote 7 in the text">&#8617;</a><a class="footnote-backref" href="#fnref2:三极管内部原理" title="Jump back to footnote 7 in the text">&#8617;</a></p>
+</li>
+<li id="fn:结型场效应管结构">
+<p>图片来自童诗白 华成英《模拟电子技术基础 第四版》P40&#160;<a class="footnote-backref" href="#fnref:结型场效应管结构" title="Jump back to footnote 8 in the text">&#8617;</a></p>
+</li>
+<li id="fn:源极漏极短路时的导电沟道">
+<p>图片来自童诗白 华成英《模拟电子技术基础 第四版》P41&#160;<a class="footnote-backref" href="#fnref:源极漏极短路时的导电沟道" title="Jump back to footnote 9 in the text">&#8617;</a></p>
+</li>
+<li id="fn:源极-漏极电压对导电沟道的影响">
+<p>图片来自童诗白 华成英《模拟电子技术基础 第四版》P42&#160;<a class="footnote-backref" href="#fnref:源极-漏极电压对导电沟道的影响" title="Jump back to footnote 10 in the text">&#8617;</a><a class="footnote-backref" href="#fnref2:源极-漏极电压对导电沟道的影响" title="Jump back to footnote 10 in the text">&#8617;</a><a class="footnote-backref" href="#fnref3:源极-漏极电压对导电沟道的影响" title="Jump back to footnote 10 in the text">&#8617;</a><a class="footnote-backref" href="#fnref4:源极-漏极电压对导电沟道的影响" title="Jump back to footnote 10 in the text">&#8617;</a></p>
+</li>
+<li id="fn:场效应管的输出特性">
+<p>图片来自童诗白 华成英《模拟电子技术基础 第四版》P43&#160;<a class="footnote-backref" href="#fnref:场效应管的输出特性" title="Jump back to footnote 11 in the text">&#8617;</a></p>
+</li>
+<li id="fn:N沟道结型场效应管结构示意图">
+<p>图片来自童诗白 华成英《模拟电子技术基础 第四版》P40&#160;<a class="footnote-backref" href="#fnref:N沟道结型场效应管结构示意图" title="Jump back to footnote 12 in the text">&#8617;</a><a class="footnote-backref" href="#fnref2:N沟道结型场效应管结构示意图" title="Jump back to footnote 12 in the text">&#8617;</a><a class="footnote-backref" href="#fnref3:N沟道结型场效应管结构示意图" title="Jump back to footnote 12 in the text">&#8617;</a><a class="footnote-backref" href="#fnref4:N沟道结型场效应管结构示意图" title="Jump back to footnote 12 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>

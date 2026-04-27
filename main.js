@@ -143,6 +143,108 @@ createApp({
             bringToFront(articleId, 'article');
         };
 
+        const renderMath = async (root = document) => {
+            if (!window.MathJax || !window.MathJax.typesetPromise) {
+                return;
+            }
+            try {
+                const targets = root instanceof Element ? [root] : undefined;
+                await window.MathJax.typesetPromise(targets);
+            } catch (error) {
+                console.error('MathJax render failed:', error);
+            }
+        };
+
+        const parseWindowWidth = (widthValue) => {
+            if (typeof widthValue === 'number' && Number.isFinite(widthValue)) {
+                return widthValue;
+            }
+            if (typeof widthValue !== 'string') {
+                return null;
+            }
+            const normalized = widthValue.trim();
+            if (normalized.endsWith('px')) {
+                const parsed = Number.parseFloat(normalized);
+                return Number.isFinite(parsed) ? parsed : null;
+            }
+            if (normalized.endsWith('%')) {
+                const parsed = Number.parseFloat(normalized);
+                return Number.isFinite(parsed) ? window.innerWidth * parsed / 100 : null;
+            }
+            if (normalized.startsWith('calc(100%')) {
+                return window.innerWidth;
+            }
+            const fallback = Number.parseFloat(normalized);
+            return Number.isFinite(fallback) ? fallback : null;
+        };
+
+        const measureTitleWidth = (() => {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            return (value) => {
+                if (!context) {
+                    return value.length * 14;
+                }
+                context.font = '500 14px "Noto Sans SC", sans-serif';
+                return context.measureText(value).width;
+            };
+        })();
+
+        const getWindowTitle = (title, widthValue) => {
+            if (!title) {
+                return '';
+            }
+            const normalized = String(title).trim();
+            const windowWidth = parseWindowWidth(widthValue);
+            if (!windowWidth) {
+                return normalized;
+            }
+
+            const availableWidth = Math.max(80, windowWidth - 120);
+            if (measureTitleWidth(normalized) <= availableWidth) {
+                return normalized;
+            }
+
+            const chars = Array.from(normalized);
+            let head = '';
+            let tail = '';
+            let left = 0;
+            let right = chars.length - 1;
+            const ellipsis = '...';
+
+            while (left <= right) {
+                const nextHead = head + chars[left];
+                const nextTail = chars[right] + tail;
+                const headCandidate = measureTitleWidth(nextHead + ellipsis + tail);
+                const tailCandidate = measureTitleWidth(head + ellipsis + nextTail);
+
+                if (headCandidate <= availableWidth && (headCandidate <= tailCandidate || tail === '')) {
+                    head = nextHead;
+                    left += 1;
+                    continue;
+                }
+                if (tailCandidate <= availableWidth) {
+                    tail = nextTail;
+                    right -= 1;
+                    continue;
+                }
+                break;
+            }
+
+            if (!head && !tail) {
+                return normalized;
+            }
+
+            while (tail && measureTitleWidth(head + ellipsis + tail) > availableWidth) {
+                tail = tail.slice(1);
+            }
+            while (head && measureTitleWidth(head + ellipsis + tail) > availableWidth) {
+                head = head.slice(0, -1);
+            }
+
+            return `${head}${ellipsis}${tail}`;
+        };
+
         const openArticle = async (article) => {
             const existing = openArticles.value.find(a => a.id === article.id);
             if (existing) {
@@ -178,6 +280,10 @@ createApp({
             };
             openArticles.value.push(win);
             activeWindowId.value = article.id;
+            requestAnimationFrame(() => {
+                const articleBody = document.querySelector(`.article-body[data-article-id="${article.id}"] .article-render-content`);
+                renderMath(articleBody || document);
+            });
         };
 
         const closeArticle = (id) => {
@@ -388,6 +494,7 @@ createApp({
             minimizeWindow,
             maximizeWindow,
             scrollToHeading,
+            getWindowTitle,
             activeWindowId
         };
     }

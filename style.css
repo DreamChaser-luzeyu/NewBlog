@@ -219,12 +219,23 @@ body {
     color: var(--float-active-winframe-font-color);
 }
 
+
+.window-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    padding-right: 12px;
+}
+
 /* 窗口控制按钮容器 */
 .window-controls {
     display: flex;
     gap: 8px;
     align-items: center;
     margin-right: -2px; /* 这里的负边距配合 titlebar 的 padding 实现与上边距的视觉对称 */
+    flex-shrink: 0;
 }
 
 .window-ctrl-btn {
@@ -426,6 +437,25 @@ body {
 .article-render-content ol {
     padding-left: 2em;
     margin-bottom: 16px;
+}
+
+.article-render-content img {
+    display: block;
+    max-width: 100%;
+    width: auto;
+    height: auto;
+    margin: 16px auto;
+}
+
+.article-render-content mjx-container {
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-width: 100%;
+    margin: 16px 0;
+}
+
+.article-render-content mjx-container[display="true"] {
+    display: block;
 }
 
 /* iframe 激活处理 */

@@ -1,246 +1,44 @@
-<h1 id="mptcp">MPTCP 内核配置</h1>
-<h2 id="_1">服务端</h2>
-<div class="codehilite"><pre><span></span><code>sudo<span class="w"> </span>-i<span class="w"> </span>sysctl<span class="w"> </span>net.mptcp.enabled
-sudo<span class="w"> </span>ip<span class="w"> </span>mptcp<span class="w"> </span>endpoint<span class="w"> </span>add<span class="w"> </span><span class="o">[</span>Another<span class="w"> </span>Path<span class="w"> </span>IP<span class="o">]</span><span class="w"> </span>signal<span class="w">  </span><span class="c1"># Add path 203.0.113.17</span>
-ip<span class="w"> </span>mptcp<span class="w"> </span>limits<span class="w"> </span>show
-sudo<span class="w"> </span>ip<span class="w"> </span>mptcp<span class="w"> </span>limits<span class="w"> </span><span class="nb">set</span><span class="w"> </span>subflow<span class="w"> </span><span class="m">2</span>
+<h1 id="_1">常用命令代理</h1>
+<div class="codehilite"><pre><span></span><code><span class="c1"># --- env</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">HTTP_PROXY</span><span class="o">=</span><span class="m">127</span>.0.0.1:7897
+<span class="nb">export</span><span class="w"> </span><span class="nv">HTTPS_PROXY</span><span class="o">=</span><span class="nv">$HTTP_PROXY</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">SOCKS5_PROXY</span><span class="o">=</span><span class="m">127</span>.0.0.1:7897
+<span class="nb">export</span><span class="w"> </span><span class="nv">ALL_PROXY</span><span class="o">=</span>socks5h://127.0.0.1:7897
+<span class="c1"># --- curl </span>
+curl<span class="w"> </span>ip.sb<span class="w"> </span>--proxy<span class="w"> </span>socks5://127.0.0.1:7897
+curl<span class="w"> </span>ip.sb<span class="w"> </span>--proxy<span class="w"> </span>socks5h://127.0.0.1:7897<span class="w"> </span><span class="c1"># remote resolve</span>
+<span class="c1"># --- wget</span>
+wget<span class="w"> </span>ip.sb<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;HTTP_PROXY=</span><span class="si">${</span><span class="nv">HTTP_PROXY</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;HTTPS_PROXY=</span><span class="si">${</span><span class="nv">HTTPS_PROXY</span><span class="si">}</span><span class="s2">&quot;</span>
+<span class="c1"># --- apt</span>
+<span class="c1"># socks5 seems not working</span>
+sudo<span class="w"> </span>apt<span class="w"> </span>-o<span class="w"> </span>Acquire::socks::proxy<span class="o">=</span><span class="s2">&quot;socks5://</span><span class="si">${</span><span class="nv">SOCKS5_PROXY</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span>update
+sudo<span class="w"> </span>apt<span class="w"> </span>-o<span class="w"> </span>Acquire::http::proxy<span class="o">=</span><span class="s2">&quot;http://</span><span class="si">${</span><span class="nv">HTTP_PROXY</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span>update
+sudo<span class="w"> </span>apt<span class="w"> </span>-o<span class="w"> </span>Acquire::http::proxy<span class="o">=</span><span class="s2">&quot;socks5h://</span><span class="si">${</span><span class="nv">SOCKS5_PROXY</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span>update
+<span class="c1"># --- git</span>
+<span class="c1"># set</span>
+git<span class="w"> </span>config<span class="w"> </span>--global<span class="w"> </span>http.proxy<span class="w"> </span>socks5h://<span class="si">${</span><span class="nv">SOCKS5_PROXY</span><span class="si">}</span>
+git<span class="w"> </span>config<span class="w"> </span>--global<span class="w"> </span>https.proxy<span class="w"> </span>socks5h://<span class="si">${</span><span class="nv">SOCKS5_PROXY</span><span class="si">}</span>
+<span class="c1"># unset</span>
+git<span class="w"> </span>config<span class="w"> </span>--global<span class="w"> </span>--unset<span class="w"> </span>http.proxy
+git<span class="w"> </span>config<span class="w"> </span>--global<span class="w"> </span>--unset<span class="w"> </span>https.proxy
+<span class="c1"># --- docker</span>
+mkdir<span class="w"> </span>-p<span class="w"> </span>/etc/systemd/system/docker.service.d
+touch<span class="w"> </span>/etc/systemd/system/docker.service.d/http-proxy.conf
+cat<span class="w"> </span>&gt;<span class="w"> </span>/etc/systemd/system/docker.service.d/http-proxy.conf<span class="w"> </span><span class="s">&lt;&lt; EOF</span>
+<span class="s">[Service]</span>
+<span class="s">Environment=&quot;HTTP_PROXY=127.0.0.1:7897&quot;</span>
+<span class="s">Environment=&quot;HTTPS_PROXY=127.0.0.1:7897&quot;</span>
+<span class="s">EOF</span>
+systemctl<span class="w"> </span>daemon-reload
+systemctl<span class="w"> </span>restart<span class="w"> </span>docker
+systemctl<span class="w"> </span>show<span class="w"> </span>--property<span class="o">=</span>Environment<span class="w"> </span>docker
 
-sudo<span class="w"> </span>sed<span class="w"> </span>-i<span class="w"> </span><span class="s1">&#39;s/# addr-flags=subflow/addr-flags=subflow/&#39;</span><span class="w"> </span>/etc/mptcpd/mptcpd.conf<span class="w"> </span><span class="c1"># 编辑配置</span>
-sudo<span class="w"> </span>systemctl<span class="w"> </span>restart<span class="w"> </span>mptcp<span class="w"> </span><span class="c1"># 重启</span>
-ip<span class="w"> </span>mptcp<span class="w"> </span>limits<span class="w"> </span>show<span class="w"> </span><span class="c1"># 检查</span>
-
-<span class="c1"># Convert MPTCP stream to normal TCP stream</span>
-socat<span class="w"> </span>TCP4-LISTEN:<span class="o">[</span>MPTCP<span class="w"> </span>Port<span class="o">]</span>,fork,protocol<span class="o">=</span>0x106,nodelay<span class="w"> </span>TCP:127.0.0.1:<span class="o">[</span>Server<span class="w"> </span>Port<span class="o">]</span>
-<span class="c1"># Run server on [Server Port]</span>
+<span class="c1"># --- pip</span>
+<span class="c1"># temporary</span>
+pip<span class="w"> </span>install<span class="w"> </span>onnxruntime<span class="w"> </span>--proxy<span class="o">=</span><span class="s2">&quot;socks5h://10.107.1.101:7890&quot;</span>
+<span class="c1"># set</span>
+pip<span class="w"> </span>install<span class="w"> </span>pysocks
+pip<span class="w"> </span>config<span class="w"> </span><span class="nb">set</span><span class="w"> </span>global.socks<span class="w"> </span>socks5h://10.107.1.101:7890
+<span class="c1"># unset</span>
+pip<span class="w"> </span>config<span class="w"> </span><span class="nb">set</span><span class="w"> </span>global.proxy<span class="w"> </span>None
 </code></pre></div>
-
-<div class="codehilite"><pre><span></span><code>sudo<span class="w"> </span>-i<span class="w"> </span>sysctl<span class="w"> </span>net.mptcp.enabled
-sudo<span class="w"> </span>ip<span class="w"> </span>mptcp<span class="w"> </span>endpoint<span class="w"> </span>add<span class="w"> </span><span class="m">203</span>.0.113.11<span class="w"> </span>signal
-sudo<span class="w"> </span>ip<span class="w"> </span>mptcp<span class="w"> </span>endpoint<span class="w"> </span>add<span class="w"> </span><span class="m">203</span>.0.113.18<span class="w"> </span>signal
-ip<span class="w"> </span>mptcp<span class="w"> </span>limits<span class="w"> </span>show
-<span class="c1"># 似乎重启后就是8</span>
-<span class="c1"># sudo ip mptcp limits set subflow 3</span>
-
-sudo<span class="w"> </span>sed<span class="w"> </span>-i<span class="w"> </span><span class="s1">&#39;s/# addr-flags=subflow/addr-flags=subflow/&#39;</span><span class="w"> </span>/etc/mptcpd/mptcpd.conf
-sudo<span class="w"> </span>systemctl<span class="w"> </span>restart<span class="w"> </span>mptcp
-ip<span class="w"> </span>mptcp<span class="w"> </span>limits<span class="w"> </span>show
-
-<span class="c1"># Convert MPTCP stream to normal TCP stream</span>
-socat<span class="w"> </span>TCP4-LISTEN:10079,fork,protocol<span class="o">=</span>0x106,nodelay<span class="w"> </span>TCP:127.0.0.1:80
-<span class="c1"># Run server on [Server Port]</span>
-</code></pre></div>
-
-<h2 id="_2">客户端</h2>
-<div class="codehilite"><pre><span></span><code>sudo<span class="w"> </span>-i<span class="w"> </span>sysctl<span class="w"> </span>net.mptcp.enabled
-sudo<span class="w"> </span>ip<span class="w"> </span>mptcp<span class="w"> </span>endpoint<span class="w"> </span>add<span class="w"> </span><span class="o">[</span>Another<span class="w"> </span>Path<span class="w"> </span>IP<span class="o">]</span><span class="w"> </span>subflow<span class="w"> </span><span class="c1"># 应该可省略</span>
-ip<span class="w"> </span>mptcp<span class="w"> </span>limits<span class="w"> </span>show
-sudo<span class="w"> </span>ip<span class="w"> </span>mptcp<span class="w"> </span>limits<span class="w"> </span><span class="nb">set</span><span class="w"> </span>add_addr_accepted<span class="w"> </span><span class="m">2</span>
-sudo<span class="w"> </span>ip<span class="w"> </span>mptcp<span class="w"> </span>limits<span class="w"> </span><span class="nb">set</span><span class="w"> </span>subflow<span class="w"> </span><span class="m">2</span>
-
-sudo<span class="w"> </span>sed<span class="w"> </span>-i<span class="w"> </span><span class="s1">&#39;s/# addr-flags=subflow/addr-flags=subflow/&#39;</span><span class="w"> </span>/etc/mptcpd/mptcpd.conf<span class="w"> </span><span class="c1"># 编辑配置</span>
-sudo<span class="w"> </span>systemctl<span class="w"> </span>restart<span class="w"> </span>mptcp<span class="w"> </span><span class="c1"># 重启</span>
-ip<span class="w"> </span>mptcp<span class="w"> </span>limits<span class="w"> </span>show<span class="w"> </span><span class="c1"># 检查</span>
-
-<span class="c1"># Convert normal TCP stream to MPTCP stream</span>
-socat<span class="w"> </span>TCP4-LISTEN:<span class="o">[</span>Local<span class="w"> </span>MPTCP<span class="w"> </span>Port<span class="o">]</span>,fork<span class="w"> </span>TCP:<span class="o">[</span>Server_IP<span class="o">]</span>:<span class="o">[</span>Server_MPTCP_Port<span class="o">]</span>,protocol<span class="o">=</span>0x106,nodelay
-<span class="c1"># Run client and connect to 127.0.0.1:[Local MPTCP Port]</span>
-</code></pre></div>
-
-<div class="codehilite"><pre><span></span><code>sudo<span class="w"> </span>-i<span class="w"> </span>sysctl<span class="w"> </span>net.mptcp.enabled
-<span class="c1"># sudo ip mptcp endpoint add 203.0.113.10 subflow </span>
-ip<span class="w"> </span>mptcp<span class="w"> </span>limits<span class="w"> </span>show
-sudo<span class="w"> </span>ip<span class="w"> </span>mptcp<span class="w"> </span>limits<span class="w"> </span><span class="nb">set</span><span class="w"> </span>add_addr_accepted<span class="w"> </span><span class="m">2</span>
-sudo<span class="w"> </span>ip<span class="w"> </span>mptcp<span class="w"> </span>limits<span class="w"> </span><span class="nb">set</span><span class="w"> </span>subflow<span class="w"> </span><span class="m">2</span>
-
-sudo<span class="w"> </span>sed<span class="w"> </span>-i<span class="w"> </span><span class="s1">&#39;s/# addr-flags=subflow/addr-flags=subflow/&#39;</span><span class="w"> </span>/etc/mptcpd/mptcpd.conf
-sudo<span class="w"> </span>systemctl<span class="w"> </span>restart<span class="w"> </span>mptcp
-ip<span class="w"> </span>mptcp<span class="w"> </span>limits<span class="w"> </span>show
-
-<span class="c1"># Convert normal TCP stream to MPTCP stream</span>
-socat<span class="w"> </span>TCP4-LISTEN:4079,fork<span class="w"> </span>TCP:203.0.113.10:8079,protocol<span class="o">=</span>0x106,nodelay
-<span class="c1"># Run client and connect to 127.0.0.1:[Local MPTCP Port]</span>
-</code></pre></div>
-
-<h1 id="mptcp-aggligator">MPTCP aggligator配置</h1>
-<h2 id="_3">服务端</h2>
-<div class="codehilite"><pre><span></span><code>sudo<span class="w"> </span>apt<span class="w"> </span>update
-<span class="c1"># sudo apt install cargo -y</span>
-curl<span class="w"> </span>--proto<span class="w"> </span><span class="s1">&#39;=https&#39;</span><span class="w"> </span>--tlsv1.2<span class="w"> </span>-sSf<span class="w"> </span>https://sh.rustup.rs<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
-cargo<span class="w"> </span>install<span class="w"> </span>aggligator-util
-
-<span class="c1"># Multipath Port: 用于接收来自不同路径TCP子流的监听端口</span>
-<span class="c1"># Server Port: 要使用MPTCP的服务的端口</span>
-agg-tunnel<span class="w"> </span>server<span class="w"> </span>--tcp<span class="w"> </span><span class="o">[</span>Multipath<span class="w"> </span>Port<span class="o">]</span><span class="w"> </span>--port<span class="w"> </span><span class="o">[</span>Server<span class="w"> </span>Port<span class="o">]</span>
-</code></pre></div>
-
-<div class="codehilite"><pre><span></span><code>agg-tunnel<span class="w"> </span>server<span class="w"> </span>--tcp<span class="w"> </span><span class="m">79</span><span class="w"> </span>--port<span class="w"> </span><span class="m">80</span><span class="w">  </span><span class="c1"># HK Hostyun</span>
-</code></pre></div>
-
-<h2 id="_4">客户端</h2>
-<div class="codehilite"><pre><span></span><code>sudo<span class="w"> </span>apt<span class="w"> </span>update
-<span class="c1"># sudo apt install cargo -y</span>
-curl<span class="w"> </span>--proto<span class="w"> </span><span class="s1">&#39;=https&#39;</span><span class="w"> </span>--tlsv1.2<span class="w"> </span>-sSf<span class="w"> </span>https://sh.rustup.rs<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
-<span class="c1"># CN</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">RUSTUP_DIST_SERVER</span><span class="o">=</span><span class="s2">&quot;https://rsproxy.cn&quot;</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">RUSTUP_UPDATE_ROOT</span><span class="o">=</span><span class="s2">&quot;https://rsproxy.cn/rustup&quot;</span>
-curl<span class="w"> </span>--proto<span class="w"> </span><span class="s1">&#39;=https&#39;</span><span class="w"> </span>--tlsv1.2<span class="w"> </span>-sSf<span class="w"> </span>https://rsproxy.cn/rustup-init.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
-cargo<span class="w"> </span>install<span class="w"> </span>aggligator-util
-
-
-<span class="c1"># [Transit IP]:[Port] : 接收子流的IP和端口，可以写中转机的IP:端口，或是服务机的Multipath Port</span>
-<span class="c1"># [Remote Server Port]: 远程服务的端口</span>
-<span class="c1"># [Local Listen Port]: 本地监听的端口，访问此端口相当于通过MPTCP连接远程服务</span>
-agg-tunnel<span class="w"> </span>client<span class="w"> </span><span class="se">\</span>
---tcp<span class="w"> </span><span class="o">[</span>Transit<span class="w"> </span>IP<span class="o">]</span>:<span class="o">[</span>Port<span class="o">]</span><span class="w"> </span><span class="se">\</span>
---tcp<span class="w"> </span><span class="o">[</span>Transit<span class="w"> </span>IP<span class="o">]</span>:<span class="o">[</span>Port<span class="o">]</span><span class="w"> </span><span class="se">\</span>
---port<span class="w"> </span><span class="o">[</span>Remote<span class="w"> </span>Server<span class="w"> </span>Port<span class="o">]</span>:<span class="o">[</span>Local<span class="w"> </span>Listen<span class="w"> </span>Port<span class="o">]</span>
-</code></pre></div>
-
-<div class="codehilite"><pre><span></span><code>agg-tunnel<span class="w"> </span>client<span class="w"> </span><span class="se">\</span>
---tcp<span class="w"> </span><span class="m">203</span>.0.113.10:79<span class="w"> </span><span class="se">\</span>
---tcp<span class="w"> </span><span class="m">203</span>.0.113.11:79<span class="w"> </span><span class="se">\</span>
---tcp<span class="w"> </span><span class="m">203</span>.0.113.18:79<span class="w"> </span><span class="se">\</span>
---port<span class="w"> </span><span class="m">80</span>:4080
-</code></pre></div>
-
-<h1 id="_5">中转机</h1>
-<div class="codehilite"><pre><span></span><code><span class="nb">echo</span><span class="w"> </span><span class="m">1</span><span class="w"> </span>&gt;<span class="w"> </span>/proc/sys/net/ipv4/ip_forward
-sysctl<span class="w"> </span>-p
-<span class="c1"># iptables -t nat -A PREROUTING -p tcp --dport 79 -j DNAT --to-destination 203.0.113.10:79</span>
-iptables<span class="w"> </span>-t<span class="w"> </span>nat<span class="w"> </span>-A<span class="w"> </span>PREROUTING<span class="w"> </span>-p<span class="w"> </span>tcp<span class="w"> </span>--dport<span class="w"> </span><span class="m">10079</span><span class="w"> </span>-j<span class="w"> </span>DNAT<span class="w"> </span>--to-destination<span class="w"> </span><span class="m">203</span>.0.113.10:10079
-iptables<span class="w"> </span>-t<span class="w"> </span>nat<span class="w"> </span>-A<span class="w"> </span>POSTROUTING<span class="w"> </span>-j<span class="w"> </span>MASQUERADE<span class="w">  </span><span class="c1"># 动态伪装，修改来源IP为本机</span>
-</code></pre></div>
-
-<h1 id="_6">服务器端口号对应关系</h1>
-<p>各个vps将通过何端口转发到指定vps，这些端口都是MPTCP的端口</p>
-<p>GOST统一使用16400端口，GOST的MPTCP端口使用79~75端口</p>
-<div class="codehilite"><pre><span></span><code><span class="k">[VPS]             [HTTP] [Local Port]</span>
-<span class="na">HK Hostyun  ---    10079   10079 </span>
-<span class="na">HK WePC     ---    10078    </span>
-<span class="na">JP YxVM     ---    10077    </span>
-<span class="na">SG Azure    ---    10076    </span>
-<span class="na">US Racknerd ---    10075    </span>
-</code></pre></div>
-
-<h1 id="_7">其他</h1>
-<h2 id="cargo">cargo换源</h2>
-<p><code>nano ~/.cargo/config</code></p>
-<div class="codehilite"><pre><span></span><code><span class="k">[source.crates-io]</span>
-<span class="n">registry</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;https://github.com/rust-lang/crates.io-index&quot;</span>
-<span class="c1"># 指定镜像</span>
-<span class="n">replace-with</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;ustc&#39;</span><span class="w"> </span><span class="c1"># 如：tuna、sjtu、ustc，或者 rustcc</span>
-
-<span class="c1"># 注：以下源配置一个即可，无需全部</span>
-
-<span class="c1"># 中国科学技术大学</span>
-<span class="k">[source.ustc]</span>
-<span class="n">registry</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;https://mirrors.ustc.edu.cn/crates.io-index&quot;</span>
-<span class="c1"># &gt;&gt;&gt; 或者 &lt;&lt;&lt;</span>
-<span class="c1"># registry = &quot;git://mirrors.ustc.edu.cn/crates.io-index&quot;</span>
-
-<span class="c1"># 上海交通大学</span>
-<span class="k">[source.sjtu]</span>
-<span class="n">registry</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;https://mirrors.sjtug.sjtu.edu.cn/git/crates.io-index/&quot;</span>
-
-<span class="c1"># 清华大学</span>
-<span class="k">[source.tuna]</span>
-<span class="n">registry</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;https://mirrors.tuna.tsinghua.edu.cn/git/crates.io-index.git&quot;</span>
-
-<span class="c1"># rustcc社区</span>
-<span class="k">[source.rustcc]</span>
-<span class="n">registry</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;https://code.aliyun.com/rustcc/crates.io-index.git&quot;</span>
-</code></pre></div>
-
-<h2 id="daemonize">Daemonize</h2>
-<h3 id="_8">远程</h3>
-<p><code>mptcp-http80.service</code></p>
-<div class="codehilite"><pre><span></span><code><span class="k">[Unit]</span>
-<span class="na">Description</span><span class="o">=</span><span class="s">MPTCP HTTP80</span>
-<span class="na">After</span><span class="o">=</span><span class="s">network.target          # 服务依赖（再这些服务后启动本服务）</span>
-
-<span class="k">[Service]</span>
-<span class="na">Type</span><span class="o">=</span><span class="s">forking                  # 服务类型 simple/forking/oneshot/dbus/notify/idle</span>
-<span class="na">ExecStart</span><span class="o">=</span><span class="s">socat TCP4-LISTEN:8079,fork,protocol=0x106,nodelay TCP:127.0.0.1:80</span>
-<span class="na">                              # 启动命令</span>
-
-<span class="na">[Install]</span>
-<span class="na">WantedBy</span><span class="o">=</span><span class="s">multi-user.target    # 服务安装设置，multi-user.target是默认的自启动target</span>
-<span class="err">                              # 这个组里的所有服务都将开机启动</span>
-</code></pre></div>
-
-<p><code>mptcp-ssgost.service</code></p>
-<div class="codehilite"><pre><span></span><code><span class="k">[Unit]</span>
-<span class="na">Description</span><span class="o">=</span><span class="s">MPTCP ssgost</span>
-<span class="na">After</span><span class="o">=</span><span class="s">network.target          # 服务依赖（再这些服务后启动本服务）</span>
-
-<span class="k">[Service]</span>
-<span class="na">Type</span><span class="o">=</span><span class="s">forking                  # 服务类型 simple/forking/oneshot/dbus/notify/idle</span>
-<span class="na">ExecStart</span><span class="o">=</span><span class="s">socat TCP4-LISTEN:79,fork,protocol=0x106,nodelay TCP:127.0.0.1:16400</span>
-<span class="na">                              # 启动命令</span>
-
-<span class="na">[Install]</span>
-<span class="na">WantedBy</span><span class="o">=</span><span class="s">multi-user.target    # 服务安装设置，multi-user.target是默认的自启动target</span>
-<span class="err">                              # 这个组里的所有服务都将开机启动</span>
-</code></pre></div>
-
-<p><code>gost-tunnel.service</code></p>
-<div class="codehilite"><pre><span></span><code><span class="k">[Unit]</span>
-<span class="na">Description</span><span class="o">=</span><span class="s">Gost Tunnel Global</span>
-<span class="na">After</span><span class="o">=</span><span class="s">network.target          # 服务依赖（再这些服务后启动本服务）</span>
-
-<span class="k">[Service]</span>
-<span class="na">Type</span><span class="o">=</span><span class="s">forking                  # 服务类型 simple/forking/oneshot/dbus/notify/idle</span>
-<span class="na">ExecStart</span><span class="o">=</span><span class="s">gost -L=mwss://:16400/127.0.0.1:8964</span>
-<span class="na">                              # 启动命令</span>
-
-<span class="na">[Install]</span>
-<span class="na">WantedBy</span><span class="o">=</span><span class="s">multi-user.target    # 服务安装设置，multi-user.target是默认的自启动target</span>
-<span class="err">                              # 这个组里的所有服务都将开机启动</span>
-</code></pre></div>
-
-<p>或者使用脚本</p>
-<div class="codehilite"><pre><span></span><code><span class="ch">#!/bin/bash</span>
-nohup<span class="w"> </span>gost<span class="w"> </span>-L<span class="o">=</span>mwss://:16400/127.0.0.1:8964<span class="w"> </span>&gt;&gt;<span class="w"> </span>./gost.log<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">&amp;</span>
-nohup<span class="w"> </span>socat<span class="w"> </span>TCP4-LISTEN:8079,fork,protocol<span class="o">=</span>0x106,nodelay<span class="w"> </span>TCP:127.0.0.1:80<span class="w"> </span>&gt;&gt;<span class="w"> </span>./mptcp80.log<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">&amp;</span>
-nohup<span class="w"> </span>socat<span class="w"> </span>TCP4-LISTEN:79,fork,protocol<span class="o">=</span>0x106,nodelay<span class="w"> </span>TCP:127.0.0.1:16400<span class="w"> </span>&gt;&gt;<span class="w"> </span>./mptcpssgost.log<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">&amp;</span>
-</code></pre></div>
-
-<h3 id="_9">本地</h3>
-<p><code>mptcp-http80.service</code></p>
-<div class="codehilite"><pre><span></span><code><span class="k">[Unit]</span>
-<span class="na">Description</span><span class="o">=</span><span class="s">MPTCP ssgost</span>
-<span class="na">After</span><span class="o">=</span><span class="s">network.target          # 服务依赖（再这些服务后启动本服务）</span>
-
-<span class="k">[Service]</span>
-<span class="na">Type</span><span class="o">=</span><span class="s">forking                  # 服务类型 simple/forking/oneshot/dbus/notify/idle</span>
-<span class="na">ExecStart</span><span class="o">=</span><span class="s">socat TCP4-LISTEN:8079,fork TCP:203.0.113.10:8079,protocol=0x106,nodelay</span>
-<span class="na">                              # 启动命令</span>
-
-<span class="na">[Install]</span>
-<span class="na">WantedBy</span><span class="o">=</span><span class="s">multi-user.target    # 服务安装设置，multi-user.target是默认的自启动target</span>
-<span class="err">                              # 这个组里的所有服务都将开机启动</span>
-</code></pre></div>
-
-<p><code>gost-tunnel.service</code></p>
-<div class="codehilite"><pre><span></span><code><span class="k">[Unit]</span>
-<span class="na">Description</span><span class="o">=</span><span class="s">Gost Tunnel Local</span>
-<span class="na">After</span><span class="o">=</span><span class="s">network.target          # 服务依赖（再这些服务后启动本服务）</span>
-
-<span class="k">[Service]</span>
-<span class="na">Type</span><span class="o">=</span><span class="s">forking                  # 服务类型 simple/forking/oneshot/dbus/notify/idle</span>
-<span class="na">ExecStart</span><span class="o">=</span><span class="s">gost -L=tcp://:4079 -F=mwss://127.0.0.1:16400</span>
-<span class="na">                              # 启动命令</span>
-
-<span class="na">[Install]</span>
-<span class="na">WantedBy</span><span class="o">=</span><span class="s">multi-user.target    # 服务安装设置，multi-user.target是默认的自启动target</span>
-<span class="err">                              # 这个组里的所有服务都将开机启动</span>
-</code></pre></div>
-
-<p>或者使用脚本</p>
-<div class="codehilite"><pre><span></span><code><span class="ch">#!/bin/bash</span>
-nohup<span class="w"> </span>socat<span class="w"> </span>TCP4-LISTEN:8079,fork<span class="w"> </span>TCP:203.0.113.10:8079,protocol<span class="o">=</span>0x106,nodelay<span class="w"> </span>&gt;&gt;<span class="w"> </span>./mptcp80.log<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">&amp;</span>
-nohup<span class="w"> </span>socat<span class="w"> </span>TCP4-LISTEN:16400,fork<span class="w"> </span>TCP:203.0.113.10:79,protocol<span class="o">=</span>0x106,nodelay<span class="w"> </span>&gt;&gt;<span class="w"> </span>./mptcpssgost.log<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">&amp;</span>
-nohup<span class="w"> </span>gost<span class="w"> </span>-L<span class="o">=</span>tcp://:4079<span class="w"> </span>-F<span class="o">=</span>mwss://127.0.0.1:16400<span class="w"> </span>&gt;&gt;<span class="w"> </span>./gost.log<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">&amp;</span>
-</code></pre></div>
-
-<h3 id="_10"></h3>

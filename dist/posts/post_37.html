@@ -1,73 +1,236 @@
-<h1 id="_1">通用规范</h1>
+<h1 id="c">C++现代内存管理</h1>
+<h2 id="_1">左值和右值</h2>
+<h3 id="_2">左值</h3>
+<ul>
+<li>可以取地址的常量或变量就是左值</li>
+<li>可以放在等号左边的值一定是左值</li>
+<li>可以取地址的常量也是左值</li>
+</ul>
+<h3 id="_3">右值</h3>
+<ul>
+<li>只能放在等号右边</li>
+<li>不能取地址</li>
+<li>如：（返回值的）函数返回值、字面量</li>
+</ul>
+<h2 id="_4">左值引用和右值引用</h2>
+<h3 id="t">左值引用 <code>T&amp;</code></h3>
+<ul>
+<li>通常说的“引用”</li>
+<li>只能引用左值，也可以理解为给左值取别名</li>
+<li>用const修饰后也可引用右值</li>
+<li>好怪，为什么需要这个特性？<ul>
+<li>为了避免对象拷贝，通常使用传引用代替传值</li>
+<li>传字面量等右值也是客观需求，如果不允许引用右值，那么右值就必须拷贝</li>
+<li>在C++11标准之前，没有右值引用的概念，因此规定了<code>const T&amp;</code>也可引用一个右值，由于有const修饰，因此是安全的</li>
+</ul>
+</li>
+<li>使用<code>const T&amp;</code>引用一个右值时，能取地址吗，我猜不行</li>
+<li>作为参数传递、作为返回值返回都不改变原对象的生命周期</li>
+<li>因此作为返回值返回时，如果返回了局部变量的引用，那么这个引用所引的对象已被释放</li>
+<li>因此返回左值引用有内存安全问题</li>
+</ul>
+<h3 id="t_1">右值引用 <code>T&amp;&amp;</code></h3>
 <ul>
 <li>
-<p>用path表示路径时，默认包含文件本身的名字；用dir表示路径时，默认只包含文件所在的文件夹。</p>
+<p>C++11的新特性</p>
 </li>
 <li>
-<p>对多行代码进行注释时，应使用如下格式</p>
+<p>用于引用一个右值</p>
+</li>
+<li>
+<p>引用左值时需要使用<code>std::move(l_val)</code></p>
+</li>
+<li>
+<p>因此就引出了“移动构造函数”的概念（当然，还有另一种对赋值运算符<code>=</code>的重载）</p>
+<p><code>cpp
+class TestClass {
+private:
+    uint8_t* mem;
+    size_t len;
+public:
+    // Copy constructor
+    TestClass(TestClass&amp; old_obj) { /*...*/ }
+    // Move constructor
+    TestClass(TestClass&amp;&amp; old_obj) { 
+        // The `old_obj` does not have the ownership to `mem` any longer
+        old_obj.mem = nullptr;
+    }
+    // Destructor
+    ~TestClass() {
+        if(mem) delete mem;
+    }
+}</code></p>
+<p>在使用<code>std::move(l_val)</code>时，移动构造函数会被调用，默认的移动构造函数和拷贝构造函数都相当于浅拷贝，是吗？？</p>
+</li>
+<li>
+<p>通常，在移动构造函数中，我们不会拷贝对象中指向堆内存的数据，而是让指针仍指向原有堆内存</p>
+<ul>
+<li>C++仍然是值语义的语言（尽管可以用指针等来表达引用语义），因此对栈上数值的拷贝无法避免</li>
+<li>当然，由于对象的所有权转移到了新的引用上，因此为避免重复析构，通常将已不再拥有所有权的对象中的指针值为<code>nullptr</code></li>
+</ul>
+</li>
+<li>
+<p>会延长对象的生命周期，可以延长到作用域之外</p>
+</li>
+<li>
+<p>因此，返回一个右值引用总是安全的</p>
+</li>
+<li>
+<p>右值引用本身是一个左值，可以进行取地址和赋值操作（没有const修饰时）</p>
+</li>
+<li>
+<p>因此，当右值引用引用一个右值时，这个右值会被存储到某处，取地址就是取该处的地址</p>
 </li>
 </ul>
+<h3 id="stdmove"><code>std::move()</code>移动赋值</h3>
+<h2 id="_5">智能指针</h2>
+<p>使用智能指针的目的是为了更容易、更安全地管理动态内存。与容器类似，智能指针也是模板。</p>
+<p>后续代码以自定义类型<code>rand_n_t</code>为例。</p>
+<div class="codehilite"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">rand_n_t</span><span class="w"> </span><span class="p">{</span>
+<span class="k">private</span><span class="o">:</span>
+<span class="w">    </span><span class="kt">int</span><span class="o">*</span><span class="w"> </span><span class="n">rand_arr</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">nullptr</span><span class="p">;</span>
+<span class="k">public</span><span class="o">:</span>
+<span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">DEFAULT_NUM</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">10</span><span class="p">;</span>
+<span class="w">    </span><span class="n">rand_n_t</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">std</span><span class="o">::</span><span class="n">cout</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">&quot;Calling rand_n_t()&quot;</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span>
+<span class="w">        </span><span class="n">rand_arr</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="kt">int</span><span class="p">[</span><span class="n">DEFAULT_NUM</span><span class="p">];</span>
+<span class="w">        </span><span class="k">for</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">DEFAULT_NUM</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">rand_arr</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">random</span><span class="p">();</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="n">rand_n_t</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">num</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">std</span><span class="o">::</span><span class="n">cout</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">&quot;Calling rand_n_t(int)&quot;</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span>
+<span class="w">        </span><span class="n">rand_arr</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="kt">int</span><span class="p">[</span><span class="n">num</span><span class="p">];</span>
+<span class="w">        </span><span class="k">for</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">num</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">rand_arr</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">random</span><span class="p">();</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="o">~</span><span class="n">rand_n_t</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">if</span><span class="p">(</span><span class="n">rand_arr</span><span class="p">)</span><span class="w"> </span><span class="k">delete</span><span class="p">[]</span><span class="w"> </span><span class="n">rand_arr</span><span class="p">;</span>
+<span class="w">        </span><span class="n">std</span><span class="o">::</span><span class="n">cout</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">&quot;destruct&quot;</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<h3 id="_6">基本使用</h3>
+<p>使用方式与普通指针类似，解引用一个智能指针将返回它指向的对象，也支持使用<code>-&gt;</code>运算符。</p>
+<ul>
+<li>
+<p><code>*</code>、<code>-&gt;</code>运算符的使用与裸指针类似。</p>
+</li>
+<li>
+<p><code>.get()</code>方法</p>
+</li>
+<li>
+<p>调用其<code>.get()</code>方法将返回其裸指针类型，但不会改变其引用计数。</p>
+</li>
+<li>
+<p>对不指向任何内存的智能指针使用<code>get()</code>方法将返回<code>nullptr</code>。</p>
+<p><code>cpp
+std::shared_ptr&lt;int&gt; sp;
+auto* rp = sp.get();     // rp == nullptr</code></p>
+</li>
+<li>
+<p>使用<code>get()</code>方法获得的裸指针可能无效，如在下列情况：</p>
+<ul>
+<li>从<code>shared_ptr</code>中获得的裸指针，而所有<code>shared_ptr</code>对象都已被销毁</li>
+</ul>
+</li>
+<li>
+<p>调用智能指针的拷贝构造函数或赋值运算符<code>=</code>会增加引用计数</p>
+</li>
+<li>
+<p>返回一个智能指针时会增加其管理的对象的引用计数</p>
+</li>
+<li>
+<p>销毁（包括但不限于离开作用域）一个智能指针时会减少其管理的对象的引用计数，</p>
+</li>
+</ul>
+<h3 id="shared_ptr"><code>shared_ptr</code></h3>
+<p>我想，<code>shared_ptr</code>该会是最常用的一种智能指针类型，因为基本上可以直接用它来替换原本的裸指针，因为它具有以下特性或功能：</p>
+<ul>
+<li>在最后一个<code>shared_ptr</code>被销毁前，其管理的对象不会释放。</li>
+<li>
+<p><code>shared_ptr</code>保证只要有任何<code>shared_ptr</code>对象引用某对象，那么该对象就不会被释放</p>
+</li>
+<li>
+<p>使用<code>std::make_shared&lt;T&gt;(...)</code>方法创建对象，返回指向<code>T</code>类型对象的指针。</p>
+</li>
+</ul>
+<p><code>cpp
+  void test_shared_ptr_1() {
+    int* raw_ptr = new int(ANY_INT_VAL);
+    std::shared_ptr&lt;int&gt; sp = std::make_shared&lt;int&gt;(ANY_INT_VAL);
+    std::shared_ptr&lt;int&gt; sp_2(sp);
+    auto* rp = sp_2.get();
+    // `raw_ptr` memory leaks after return
+    // `sp` destructs upon return
+  }</code></p>
+<ul>
+<li>使用<code>std::make_shared&lt;T&gt;(...)</code>方法创建对象时，会自动调用构造函数，也可以传参。</li>
+</ul>
+<p><code>cpp
+  void test_shared_ptr_2() {
+      rand_n_t* raw_ptr = new rand_n_t();
+      auto sp = std::make_shared&lt;rand_n_t&gt;(20);
+  }
+  // Output:
+  // Calling rand_n_t()
+  // Calling rand_n_t(int)
+  // destruct</code></p>
+<ul>
+<li>一旦一个<code>shared_ptr</code>的计数器变为0，它就会自动释放自己所管理的对象（调用析构函数）。</li>
+</ul>
+<p><code>cpp
+  void test_shared_ptr_3() {
+      auto sp = std::make_shared&lt;rand_n_t&gt;(20);
+  }
+  // Output:
+  // Calling rand_n_t(int)
+  // destruct</code></p>
+<h3 id="unique_ptr"><code>unique_ptr</code></h3>
+<h3 id="weak_ptr"><code>weak_ptr</code></h3>
+<p><code>weak_ptr</code>是一种不控制所指对象生存期的智能指针，它指向一个受到<code>shared_ptr</code>管理的对象。</p>
+<ul>
+<li>
+<p>将一个<code>weak_ptr</code>绑定到一个<code>shared_ptr</code>不会改变<code>shared_ptr</code>的引用计数；最后一个<code>shared_ptr</code>被销毁，对象就会被释放</p>
+</li>
+<li>
+<p>为了保证内存安全，我们不能直接访问<code>weak_ptr</code>指向的对象，因为它可能已经被释放</p>
+</li>
+<li>
+<p>使用<code>.lock()</code>方法，此方法将返回一个指向共享对象的<code>shared_ptr</code></p>
+<p><code>cpp
+void test_shared_ptr_5() {
+    std::shared_ptr&lt;rand_n_t&gt; sp;
+    sp = std::make_shared&lt;rand_n_t&gt;(20);
+    std::weak_ptr wp(sp);
+    if(auto ret = wp.lock()) {
+        // access wp via ret, ret valid in this case
+    }
+}</code></p>
+<ul>
+<li>只要此<code>shared_ptr</code>存在，它所指向的对象就不会被释放，因此当访问它所指的对象时，还是会增加引用计数</li>
+<li>当获得了<code>shared_ptr</code>后，即使其他原始的<code>shared_ptr</code>都已被销毁，对象也将保留，直到此<code>shared_ptr</code>被销毁</li>
+</ul>
+</li>
+<li>
+<p>可以使用<code>if</code>语句判断<code>.lock()</code>的返回值（这是C++什么机制？是<code>operator bool</code>的重载）</p>
 <p>```cpp
-  // Comment for the code line below
-  int a = 1;  // Short Comment
-  // ----- Comment for the code block until a blank line
-  int b = 2;
-  int c = 3;
-  int d = 4; </p>
-<p>// ----- L1 comment: define variables
-  //   --- L2 comment: variables for module 1
-  int var_1_for_m_1;
-  int var_2_for_m_1;
-  //   --- L2 comment: variables for module 2
-  int var_1_for_m_2;
-  int var_2_for_m_2;</p>
-<p>// ----- L1 comment: check condition and do procedure
-  bool condition;
-  if (condition) {
-      // --- L2 comment: do procedure
-      pre_do_process();
-      do_process();
-      post_do_process();
-  }</p>
-<p>```</p>
-<h1 id="c">C++编程规范</h1>
-<p>C++语言的高级特性繁多，且十分灵活，如不加以限制，则很容易导致项目难以阅读和维护。</p>
-<p>定义<code>int</code>、<code>float</code>、<code>uint16_t</code>等基本类型，不含成员函数的结构体类型，<code>std::pair&lt;&gt;</code>等简单STL容器类型为<strong>简单类型</strong>。</p>
-<p>定义带有成员函数的类，<code>std::vector&lt;&gt;</code>、<code>std::map&lt;&gt;</code>等复杂STL容器类型为<strong>复杂类型</strong>。</p>
-<p>值语义将指针作为数值对待，引用语义将指针作为引用对待。</p>
-<h2 id="_2">通用规范</h2>
-<ul>
-<li>构造函数应标明<code>explicit</code>。</li>
-<li>函数参数、局部变量使用下划线命名。</li>
-<li>如果一个类中带有虚函数，则应创建只含有纯虚函数的接口，并实现该接口。</li>
-<li>接口的命名为大驼峰，并以<code>_I</code>结尾</li>
-<li>类或结构体成员使用小驼峰命名</li>
-<li>对于不含有成员函数的类，应使用结构体。</li>
-<li>此时其成员也可使用下划线命名</li>
-<li>为保证面向对象的封装性，应尽量不使用友元。</li>
-<li>如无特殊需求，只使用<code>public</code>的方式继承。</li>
-<li>尽量不在暴露给用户的头文件中定义宏。</li>
+std::weak_ptr<rand_n_t> func2(int num) {
+    auto sp = std::make_shared<rand_n_t>(num);
+    return std::weak_ptr(sp);
+}</p>
+<p>void test_shared_ptr_6() {
+    auto wp = func2(20);
+    if(auto ret = wp.lock()) {
+        std::cout &lt;&lt; "ret valid" &lt;&lt; std::endl;
+    } else {
+        std::cout &lt;&lt; "ret invalid" &lt;&lt; std::endl;
+        // invalid in this case
+    }
+}
+```</p>
+</li>
 </ul>
-<h2 id="c-with-class">C-With-Class 规范</h2>
-<p>使用“值语义”，多在偏底层的项目中使用，为方便熟悉C但不熟悉C++高级语法的人员理解。</p>
-<ul>
-<li>不使用智能指针等封装的指针。</li>
-<li>不进行运算符重载。</li>
-<li>不使用C++除面向对象外的其他高级特性。</li>
-<li>只使用默认的拷贝构造函数，不使用移动构造。</li>
-<li>默认的拷贝构造函数符合“值语义”</li>
-</ul>
-<h2 id="java-like">Java-like 规范</h2>
-<p>使用“引用语义”，多在注重业务逻辑的项目中使用，以在大型项目的开发中兼顾开发效率与内存安全。</p>
-<ul>
-<li>如无必要，不使用宏。</li>
-<li>定义数值可使用<code>const static</code>类型的变量</li>
-<li>定义过程可使用<code>static inline</code>的函数</li>
-<li>对于复杂类型，不使用裸指针，只使用智能指针。</li>
-<li>对于简单类型，避免在堆区创建对象。</li>
-<li>不在栈上创建复杂类型对象（这样也就避免了拷贝与移动），不考虑拷贝与移动。</li>
-<li>如必须拷贝，则创建<code>duplicate()</code>成员函数供用户构造新的对象</li>
-<li>不使用引用。对于复杂类型，使用对象的智能指针来实现引用语义；对于简单类型，使用其裸指针实现引用语义。</li>
-<li>对于复杂类型，不使用对象传参或作为返回值，只使用智能指针传参。</li>
-<li>如果有复杂类型的成员，则应使用其引用（即其智能指针）。</li>
-</ul>
+<h2 id="_7">容器与智能指针</h2>

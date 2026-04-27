@@ -1,15 +1,78 @@
-<h1 id="dockeripv6">给docker容器分配ipv6地址</h1>
-<p>还是用内网ipv6吧</p>
-<p><code>/etc/docker/daemon.json</code></p>
-<div class="codehilite"><pre><span></span><code>{
-  &quot;ipv6&quot;: true,
-  &quot;fixed-cidr-v6&quot;: &quot;fd00:cafe::/64&quot;,
-  &quot;ip6tables&quot;: true
-}
+<h2 id="ip">常用ip命令</h2>
+<div class="codehilite"><pre><span></span><code>ip<span class="w"> </span>route<span class="w"> </span><span class="c1"># 打印main路由表</span>
+ip<span class="w"> </span>route<span class="w"> </span>show<span class="w"> </span>table<span class="w"> </span>main<span class="w"> </span><span class="c1"># 打印main路由表的路由</span>
+ip<span class="w"> </span>route<span class="w"> </span>show<span class="w"> </span>table<span class="w"> </span>all<span class="w"> </span><span class="c1"># 打印全部路由表的路由</span>
+ip<span class="w"> </span>route<span class="w"> </span>get<span class="w"> </span><span class="m">203</span>.0.113.12<span class="w"> </span><span class="c1"># 获得1.1.1.1使用的路由</span>
+ip<span class="w"> </span>rule<span class="w"> </span><span class="c1"># 打印路由策略，数字表示优先级（数字小的优先）</span>
+ip<span class="w"> </span>rule<span class="w"> </span>add<span class="w"> </span>table<span class="w"> </span><span class="m">20124</span><span class="w"> </span><span class="c1"># </span>
+ip<span class="w"> </span>rule<span class="w"> </span>add<span class="w"> </span>from<span class="w"> </span><span class="m">192</span>.168.1.0/24<span class="w"> </span>table<span class="w"> </span><span class="m">1</span><span class="w"> </span>prio<span class="w"> </span><span class="m">10</span><span class="w"> </span><span class="c1"># 对于来自192.168.1.0/24的流量查询路由表1,优先级10</span>
+ip<span class="w"> </span>rule<span class="w"> </span>add<span class="w"> </span>from<span class="w"> </span><span class="m">192</span>.168.2.0/24<span class="w"> </span>table<span class="w"> </span><span class="m">2</span><span class="w"> </span><span class="c1"># 对于来自192.168.2.0/24的流量查询路由表2,优先级自动（从32766递减）</span>
+<span class="c1"># 注：ip rule add table &lt;id&gt;命令会同时创建一个路由表</span>
 </code></pre></div>
 
-<div class="codehilite"><pre><span></span><code>sudo<span class="w"> </span>sysctl<span class="w"> </span>-w<span class="w"> </span>net.ipv6.conf.all.forwarding<span class="o">=</span><span class="m">1</span>
-sudo<span class="w"> </span>ip6tables<span class="w"> </span>-t<span class="w"> </span>nat<span class="w"> </span>-A<span class="w"> </span>POSTROUTING<span class="w"> </span>-s<span class="w"> </span>fd00:cafe::/64<span class="w"> </span>-o<span class="w"> </span>eth0<span class="w"> </span>-j<span class="w"> </span>MASQUERADE
+<h2 id="ip-rule">ip rule示例</h2>
+<div class="codehilite"><pre><span></span><code>root@luzeyu-c92:~#<span class="w"> </span>ip<span class="w"> </span>-6<span class="w"> </span>rule
+<span class="m">0</span>:<span class="w">      </span>from<span class="w"> </span>all<span class="w"> </span>lookup<span class="w"> </span><span class="nb">local</span>
+<span class="m">32764</span>:<span class="w">  </span>from<span class="w"> </span>all<span class="w"> </span>lookup<span class="w"> </span>main<span class="w"> </span>suppress_prefixlength<span class="w"> </span><span class="m">0</span>
+<span class="m">32765</span>:<span class="w">  </span>not<span class="w"> </span>from<span class="w"> </span>all<span class="w"> </span>fwmark<span class="w"> </span>0xca6c<span class="w"> </span>lookup<span class="w"> </span><span class="m">51820</span>
+<span class="m">32766</span>:<span class="w">  </span>from<span class="w"> </span>all<span class="w"> </span>lookup<span class="w"> </span>main
 </code></pre></div>
 
-<p>之后正常创建容器即可</p>
+<h3 id="32764-from-all-lookup-main-suppress_prefixlength-0">解释<code>32764:  from all lookup main suppress_prefixlength 0</code>：</h3>
+<ul>
+<li><code>32764</code>表示这条规则的优先级</li>
+<li><code>from all</code>表示对任何来源生效，即不限制来源地址</li>
+<li><code>lookup main</code>表示查询<code>main</code>路由表</li>
+<li><code>suppress_prefixlength 0</code> 表示抑制其中（目的地址）前缀为0的条目，即抑制默认路由</li>
+</ul>
+<h3 id="32765-not-from-all-fwmark-0xca6c-lookup-51820">解释<code>32765:  not from all fwmark 0xca6c lookup 51820</code>：</h3>
+<ul>
+<li><code>32765</code>表示这条规则的优先级</li>
+<li><code>not from all fwmark 0xca6c</code>表示<strong>不</strong>匹配<code>from all fwmark 0xca6c</code>的数据包，即<strong>不</strong>匹配任意来源的标记为<code>0xca6c</code>的数据包</li>
+<li><code>lookup 51280</code>表示查询<code>51280</code>路由表</li>
+</ul>
+<p>其含义为：对于防火墙标记<strong>不</strong>为<code>0xca6c</code>的流量查询51820路由表（若标记为<code>0xca6c</code>则继续尝试匹配下一个规则，即本例中的<code>32766</code>）</p>
+<p>这种做法常见于VPN等隧道软件的实现中，VPN软件修改路由表让所有流量都从VPN网卡路由，并将打包、加密后的数据包加上一个标记，以免VPN打包加密后的数据再次进入VPN网卡，形成回环。</p>
+<h2 id="wg-quick">wg-quick脚本</h2>
+<div class="codehilite"><pre><span></span><code><span class="o">[</span><span class="c1">#] wg set wg0 fwmark 51820</span>
+<span class="o">[</span><span class="c1">#] ip -4 route add 0.0.0.0/0 dev wg0 table 51820</span>
+<span class="o">[</span><span class="c1">#] ip -4 rule add not fwmark 51820 table 51820</span>
+<span class="o">[</span><span class="c1">#] ip -4 rule add table main suppress_prefixlength 0</span>
+<span class="o">[</span><span class="c1">#] sysctl -q net.ipv4.conf.all.src_valid_mark=1</span>
+<span class="o">[</span><span class="c1">#] nft -f /dev/fd/63</span>
+
+<span class="o">[</span><span class="c1">#] ip -4 rule delete table 51820</span>
+<span class="o">[</span><span class="c1">#] ip -4 rule delete table main suppress_prefixlength 0</span>
+<span class="o">[</span><span class="c1">#] nft -f /dev/fd/63</span>
+</code></pre></div>
+
+<div class="codehilite"><pre><span></span><code><span class="o">[</span><span class="c1">#] ip link add wg0 type wireguard</span>
+<span class="o">[</span><span class="c1">#] wg setconf wg0 /dev/fd/63</span>
+<span class="o">[</span><span class="c1">#] ip -4 address add 172.16.0.2/16 dev wg0</span>
+<span class="o">[</span><span class="c1">#] ip -6 address add fdff:520::2/32 dev wg0</span>
+<span class="o">[</span><span class="c1">#] ip -6 address add 2a12:ab80:3:2000::2/52 dev wg0</span>
+<span class="o">[</span><span class="c1">#] ip link set mtu 65456 up dev wg0</span>
+<span class="o">[</span><span class="c1">#] resolvconf -a tun.wg0 -m 0 -x</span>
+<span class="o">[</span><span class="c1">#] wg set wg0 fwmark 51820</span>
+<span class="o">[</span><span class="c1">#] ip -6 route add ::/0 dev wg0 table 51820</span>
+<span class="o">[</span><span class="c1">#] ip -6 rule add not fwmark 51820 table 51820</span>
+<span class="o">[</span><span class="c1">#] ip -6 rule add table main suppress_prefixlength 0</span>
+<span class="o">[</span><span class="c1">#] nft -f /dev/fd/63</span>
+<span class="o">[</span><span class="c1">#] ip -4 route add 0.0.0.0/0 dev wg0 table 51820</span>
+<span class="o">[</span><span class="c1">#] ip -4 rule add not fwmark 51820 table 51820</span>
+<span class="o">[</span><span class="c1">#] ip -4 rule add table main suppress_prefixlength 0</span>
+<span class="o">[</span><span class="c1">#] sysctl -q net.ipv4.conf.all.src_valid_mark=1</span>
+<span class="o">[</span><span class="c1">#] nft -f /dev/fd/63</span>
+<span class="o">[</span><span class="c1">#] iptables -A FORWARD -i enp1s0 -j ACCEPT; iptables -A FORWARD -o enp1s0 -j ACCEPT; iptables -t nat -A POSTROUTING -o wg0 -j MASQUERADE; ip6tables -A FORWARD -i wg0 -o enp1s0 -j ACCEPT; ip6tables -A FORWARD -i enp1s0 -o wg0 -j ACCEPT</span>
+
+<span class="o">[</span><span class="c1">#] ip -4 rule delete table 51820</span>
+<span class="o">[</span><span class="c1">#] ip -4 rule delete table 51820</span>
+<span class="o">[</span><span class="c1">#] ip -4 rule delete table main suppress_prefixlength 0</span>
+<span class="o">[</span><span class="c1">#] ip -4 rule delete table main suppress_prefixlength 0</span>
+<span class="o">[</span><span class="c1">#] ip -6 rule delete table 51820</span>
+<span class="o">[</span><span class="c1">#] ip -6 rule delete table main suppress_prefixlength 0</span>
+<span class="o">[</span><span class="c1">#] ip link delete dev wg0</span>
+<span class="o">[</span><span class="c1">#] resolvconf -d tun.wg0 -f</span>
+<span class="o">[</span><span class="c1">#] nft -f /dev/fd/63</span>
+<span class="o">[</span><span class="c1">#] iptables -D FORWARD -i enp1s0 -j ACCEPT; iptables -D FORWARD -o enp1s0 -j ACCEPT; iptables -t nat -D POSTROUTING -o wg0 -j MASQUERADE; ip6tables -D FORWARD -i wg0 -o enp1s0 -j ACCEPT; ip6tables -D FORWARD -i enp1s0 -o wg0 -j ACCEPT</span>
+</code></pre></div>
